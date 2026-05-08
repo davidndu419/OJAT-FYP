@@ -1,0 +1,54 @@
+// DELETE the plugins { ... } block you just added at line 29.
+
+buildscript {
+    ext {
+        buildToolsVersion = "33.0.0"
+        minSdkVersion = 21
+        compileSdkVersion = 33
+        targetSdkVersion = 33
+        ndkVersion = "23.1.7779620"
+        kotlinVersion = "1.7.10" 
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+    classpath("com.android.tools.build:gradle:7.3.1")
+    classpath("com.facebook.react:react-native-gradle-plugin")
+    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.7.10") // Set this to 1.7.1
+    }
+}
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    // This forces EVERY library to use your stable Kotlin version
+    configurations.all {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-stdlib:1.7.10"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"
+            force "org.jetbrains.kotlin:kotlin-reflect:1.7.10"
+        }
+    }
+}
+
+// Add this at the VERY BOTTOM of the file
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                // This bypasses the Kotlin version metadata check that causes the crash
+                if (it.hasProperty('kotlinOptions')) {
+                    kotlinOptions {
+                        freeCompilerArgs += ["-Xskip-prerelease-check", "-Xallow-unstable-dependencies"]
+                    }
+                }
+            }
+        }
+    }
+}
