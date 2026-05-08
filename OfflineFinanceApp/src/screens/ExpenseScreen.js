@@ -5,19 +5,13 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {
-  Button,
-  Card,
-  Divider,
-  HelperText,
-  Menu,
-  Snackbar,
-  Text,
-  TextInput,
-} from 'react-native-paper';
+import {ChevronDown, ChevronLeft, ChevronRight, Save, Wallet} from 'lucide-react-native';
+import {Menu, Snackbar, Text} from 'react-native-paper';
 import {format, formatISO, isValid, parseISO} from 'date-fns';
 import {getDBConnection} from '../database/db';
 import {
@@ -26,6 +20,8 @@ import {
   getCurrentTimestamp,
   getRowsArray,
 } from '../utils/helpers';
+import {COLORS, FONT_FAMILY} from '../theme/theme';
+import {HeroCard, IconBubble, KoboButton, ScreenHeader, SurfaceCard, type} from '../components/KoboUI';
 
 const EXPENSE_CATEGORIES = [
   'Rent',
@@ -39,9 +35,7 @@ const formatDateInput = date => format(date, 'yyyy-MM-dd');
 
 const getMonthRange = () => {
   const now = new Date();
-  const startOfMonth = formatISO(
-    new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
-  );
+  const startOfMonth = formatISO(new Date(now.getFullYear(), now.getMonth(), 1));
   const endOfMonth = formatISO(
     new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
   );
@@ -206,21 +200,18 @@ function ExpenseScreen() {
 
   const renderExpense = ({item}) => (
     <View style={styles.expenseRow}>
+      <IconBubble tone="danger" size={42}>
+        <Wallet color={COLORS.danger} size={19} strokeWidth={2.4} />
+      </IconBubble>
       <View style={styles.expenseDetails}>
-        <Text variant="titleSmall" style={styles.expenseTitle}>
-          {item.category}
-        </Text>
-        <Text variant="bodySmall" style={styles.expenseDescription}>
-          {item.description}
-        </Text>
+        <Text style={styles.expenseTitle}>{item.category}</Text>
+        <Text style={styles.expenseDescription}>{item.description}</Text>
       </View>
       <View style={styles.expenseMeta}>
-        <Text variant="titleSmall" style={styles.expenseAmount}>
-          {formatCurrency(item.amount)}
+        <Text style={[styles.expenseAmount, type.number]}>
+          -{formatCurrency(item.amount)}
         </Text>
-        <Text variant="bodySmall" style={styles.expenseDate}>
-          {format(parseISO(item.date), 'MMM d, yyyy')}
-        </Text>
+        <Text style={styles.expenseDate}>{format(parseISO(item.date), 'MMM d')}</Text>
       </View>
     </View>
   );
@@ -232,146 +223,112 @@ function ExpenseScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled">
-        <Text variant="headlineSmall" style={styles.title}>
-          Expenses
-        </Text>
-        <Text variant="bodyMedium" style={styles.subtitle}>
-          Track spending locally for offline reporting.
-        </Text>
+        <ScreenHeader
+          eyebrow="Expenses"
+          title="Spend"
+          subtitle="Track spending locally for offline reporting."
+        />
 
-        <Card style={styles.summaryCard}>
-          <Card.Content>
-            <Text variant="labelLarge" style={styles.summaryLabel}>
-              Total Expenses This Month
-            </Text>
-            <Text variant="headlineSmall" style={styles.summaryValue}>
-              {formatCurrency(monthlyTotal)}
-            </Text>
-          </Card.Content>
-        </Card>
+        <HeroCard variant="sunrise" style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>TOTAL EXPENSES THIS MONTH</Text>
+          <Text style={[styles.summaryValue, type.number]}>
+            {formatCurrency(monthlyTotal)}
+          </Text>
+        </HeroCard>
 
-        <Card style={styles.formCard}>
-          <Card.Content>
-            <Menu
-              visible={categoryMenuVisible}
-              onDismiss={() => setCategoryMenuVisible(false)}
-              anchor={
-                <Button
-                  mode="outlined"
-                  onPress={() => setCategoryMenuVisible(true)}
-                  contentStyle={styles.categoryButtonContent}
-                  style={[
-                    styles.categoryButton,
-                    errors.category && styles.errorBorder,
-                  ]}>
+        <SurfaceCard style={styles.formCard}>
+          <Menu
+            visible={categoryMenuVisible}
+            onDismiss={() => setCategoryMenuVisible(false)}
+            anchor={
+              <TouchableOpacity
+                activeOpacity={0.84}
+                onPress={() => setCategoryMenuVisible(true)}
+                style={[
+                  styles.categoryButton,
+                  errors.category && styles.errorBorder,
+                ]}>
+                <Text style={styles.categoryText}>
                   {category || 'Select Category'}
-                </Button>
-              }>
-              {EXPENSE_CATEGORIES.map(item => (
-                <Menu.Item
-                  key={item}
-                  onPress={() => {
-                    updateField('category', item);
-                    setCategoryMenuVisible(false);
-                  }}
-                  title={item}
-                />
-              ))}
-            </Menu>
-            <HelperText type="error" visible={Boolean(errors.category)}>
-              {errors.category}
-            </HelperText>
-
-            <TextInput
-              label="Description"
-              value={description}
-              onChangeText={value => updateField('description', value)}
-              mode="outlined"
-              style={styles.input}
-              error={Boolean(errors.description)}
-            />
-            <HelperText type="error" visible={Boolean(errors.description)}>
-              {errors.description}
-            </HelperText>
-
-            <TextInput
-              label="Amount"
-              value={amount}
-              onChangeText={value => updateField('amount', value)}
-              mode="outlined"
-              keyboardType="decimal-pad"
-              style={styles.input}
-              error={Boolean(errors.amount)}
-            />
-            <HelperText type="error" visible={Boolean(errors.amount)}>
-              {errors.amount}
-            </HelperText>
-
-            <View style={styles.datePickerRow}>
-              <Button
-                mode="contained-tonal"
-                onPress={() => shiftDate(-1)}
-                compact
-                style={styles.dateButton}
-                labelStyle={styles.dateButtonLabel}>
-                {'<'}
-              </Button>
-              <TextInput
-                label="Date"
-                value={expenseDate}
-                onChangeText={value => updateField('date', value)}
-                mode="outlined"
-                style={styles.dateInput}
-                error={Boolean(errors.date)}
+                </Text>
+                <ChevronDown color={COLORS.primary} size={18} />
+              </TouchableOpacity>
+            }>
+            {EXPENSE_CATEGORIES.map(item => (
+              <Menu.Item
+                key={item}
+                onPress={() => {
+                  updateField('category', item);
+                  setCategoryMenuVisible(false);
+                }}
+                title={item}
               />
-              <Button
-                mode="contained-tonal"
-                onPress={() => shiftDate(1)}
-                compact
-                style={styles.dateButton}
-                labelStyle={styles.dateButtonLabel}>
-                {'>'}
-              </Button>
-              <Button
-                mode="contained-tonal"
-                onPress={() => updateField('date', formatDateInput(new Date()))}
-                compact
-                style={styles.todayButton}
-                labelStyle={styles.todayButtonLabel}>
-                Today
-              </Button>
-            </View>
-            <HelperText type="error" visible={Boolean(errors.date)}>
-              {errors.date}
-            </HelperText>
+            ))}
+          </Menu>
+          {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
 
-            {errors.form ? (
-              <Text variant="bodySmall" style={styles.formError}>
-                {errors.form}
-              </Text>
-            ) : null}
+          <TextInput
+            placeholder="Description"
+            value={description}
+            onChangeText={value => updateField('description', value)}
+            style={styles.input}
+            placeholderTextColor={COLORS.muted}
+          />
+          {errors.description ? <Text style={styles.errorText}>{errors.description}</Text> : null}
 
-            <Button
-              mode="contained"
-              onPress={handleSaveExpense}
-              loading={isSaving}
-              disabled={isSaving}
-              style={styles.primaryButton}>
-              Save Expense
-            </Button>
-          </Card.Content>
-        </Card>
+          <TextInput
+            placeholder="Amount"
+            value={amount}
+            onChangeText={value => updateField('amount', value)}
+            keyboardType="decimal-pad"
+            style={styles.input}
+            placeholderTextColor={COLORS.muted}
+          />
+          {errors.amount ? <Text style={styles.errorText}>{errors.amount}</Text> : null}
 
-        <Card style={styles.listCard}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Recent Expenses
-            </Text>
-            <Text variant="bodySmall" style={styles.sectionSubtitle}>
-              Latest expenses saved on this device
-            </Text>
-          </Card.Content>
-          <Divider />
+          <View style={styles.datePickerRow}>
+            <TouchableOpacity
+              activeOpacity={0.84}
+              onPress={() => shiftDate(-1)}
+              style={styles.dateButton}>
+              <ChevronLeft color={COLORS.primary} size={18} />
+            </TouchableOpacity>
+            <TextInput
+              placeholder="Date"
+              value={expenseDate}
+              onChangeText={value => updateField('date', value)}
+              style={styles.dateInput}
+              placeholderTextColor={COLORS.muted}
+            />
+            <TouchableOpacity
+              activeOpacity={0.84}
+              onPress={() => shiftDate(1)}
+              style={styles.dateButton}>
+              <ChevronRight color={COLORS.primary} size={18} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.84}
+              onPress={() => updateField('date', formatDateInput(new Date()))}
+              style={styles.todayButton}>
+              <Text style={styles.todayText}>Today</Text>
+            </TouchableOpacity>
+          </View>
+          {errors.date ? <Text style={styles.errorText}>{errors.date}</Text> : null}
+          {errors.form ? <Text style={styles.errorText}>{errors.form}</Text> : null}
+
+          <KoboButton
+            onPress={handleSaveExpense}
+            loading={isSaving}
+            disabled={isSaving}>
+            Save Expense
+          </KoboButton>
+        </SurfaceCard>
+
+        <SurfaceCard style={styles.listCard}>
+          <View style={styles.sectionHead}>
+            <Save color={COLORS.primary} size={20} strokeWidth={2.4} />
+            <Text style={styles.sectionTitle}>Recent Expenses</Text>
+          </View>
           {recentExpenses.length > 0 ? (
             <FlatList
               data={recentExpenses}
@@ -380,17 +337,16 @@ function ExpenseScreen() {
               scrollEnabled={false}
             />
           ) : (
-            <Text variant="bodyMedium" style={styles.emptyText}>
-              No expenses recorded yet.
-            </Text>
+            <View style={styles.emptyState}>
+              <IconBubble tone="muted" size={50}>
+                <Wallet color={COLORS.muted} size={22} />
+              </IconBubble>
+              <Text style={styles.emptyText}>No expenses recorded yet.</Text>
+            </View>
           )}
-        </Card>
+        </SurfaceCard>
 
-        {isLoading ? (
-          <Text variant="bodySmall" style={styles.loadingText}>
-            Refreshing local expenses...
-          </Text>
-        ) : null}
+        {isLoading ? <Text style={styles.loadingText}>Refreshing local expenses...</Text> : null}
       </ScrollView>
 
       <Snackbar
@@ -405,140 +361,174 @@ function ExpenseScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: COLORS.background,
     flex: 1,
-    backgroundColor: '#f7f9fb',
   },
   content: {
-    padding: 16,
-    paddingBottom: 36,
-  },
-  title: {
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#64748b',
-    marginBottom: 16,
-    marginTop: 4,
+    alignSelf: 'center',
+    maxWidth: 448,
+    paddingBottom: 112,
+    paddingHorizontal: 20,
+    width: '100%',
   },
   summaryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    marginBottom: 14,
+    marginBottom: 16,
+    minHeight: 132,
+    justifyContent: 'center',
   },
   summaryLabel: {
-    color: '#64748b',
-    marginBottom: 6,
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.3,
   },
   summaryValue: {
-    color: '#b42318',
-    fontWeight: '700',
+    color: COLORS.primaryForeground,
+    fontSize: 34,
+    marginTop: 8,
   },
   formCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+    gap: 10,
   },
   categoryButton: {
-    borderColor: '#6b7280',
-    borderRadius: 6,
-  },
-  categoryButtonContent: {
-    justifyContent: 'flex-start',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     minHeight: 52,
+    paddingHorizontal: 16,
+  },
+  categoryText: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
   },
   errorBorder: {
-    borderColor: '#b42318',
+    borderColor: COLORS.danger,
   },
   input: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    minHeight: 52,
+    paddingHorizontal: 16,
   },
   datePickerRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 7,
   },
   dateInput: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
     flex: 1,
+    fontFamily: FONT_FAMILY,
+    minHeight: 50,
+    paddingHorizontal: 12,
   },
   dateButton: {
-    borderRadius: 6,
-    minWidth: 42,
-    marginHorizontal: 2,
-  },
-  dateButtonLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginHorizontal: 0,
+    alignItems: 'center',
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 16,
+    height: 46,
+    justifyContent: 'center',
+    width: 42,
   },
   todayButton: {
-    borderRadius: 6,
-    marginLeft: 2,
+    alignItems: 'center',
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 16,
+    height: 46,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
   },
-  todayButtonLabel: {
+  todayText: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
     fontSize: 12,
-    fontWeight: '700',
-    marginHorizontal: 4,
+    fontWeight: '800',
   },
-  formError: {
-    color: '#b42318',
-    marginBottom: 12,
-  },
-  primaryButton: {
-    borderRadius: 6,
-    marginTop: 4,
+  errorText: {
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
   },
   listCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
     marginTop: 16,
+    paddingBottom: 4,
+  },
+  sectionHead: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
   },
   sectionTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  sectionSubtitle: {
-    color: '#64748b',
-    marginTop: 2,
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 17,
+    fontWeight: '800',
   },
   expenseRow: {
     alignItems: 'center',
-    borderBottomColor: '#eef2f7',
-    borderBottomWidth: 1,
+    borderTopColor: COLORS.line,
+    borderTopWidth: 1,
     flexDirection: 'row',
+    gap: 12,
     minHeight: 72,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   expenseDetails: {
     flex: 1,
-    paddingRight: 12,
   },
   expenseTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
   },
   expenseDescription: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
     marginTop: 2,
   },
   expenseMeta: {
     alignItems: 'flex-end',
   },
   expenseAmount: {
-    color: '#b42318',
-    fontWeight: '700',
+    color: COLORS.danger,
+    fontSize: 14,
   },
   expenseDate: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
     marginTop: 2,
   },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 18,
+  },
   emptyText: {
-    color: '#64748b',
-    padding: 16,
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    marginTop: 10,
     textAlign: 'center',
   },
   loadingText: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
     marginTop: 12,
     textAlign: 'center',
   },

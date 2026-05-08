@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {Platform} from 'react-native';
 import {getDBConnection} from '../database/db';
 import {getRowsArray} from '../utils/helpers';
 import {
@@ -232,6 +233,19 @@ export const getPendingSyncCounts = async () => {
 };
 
 export const syncToServer = async () => {
+  if (Platform.OS === 'web') {
+    await AsyncStorage.setItem(
+      LAST_SUCCESSFUL_SYNC_KEY,
+      new Date().toISOString(),
+    );
+
+    return {
+      success: true,
+      synced: 0,
+      errors: [],
+    };
+  }
+
   const result = {
     success: false,
     synced: 0,

@@ -6,6 +6,7 @@ import {store} from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
 import {initDatabase} from './src/database/db';
 import {startNetworkListener} from './src/services/networkListener';
+import {APP_THEME, COLORS} from './src/theme/theme';
 
 function App() {
   useEffect(() => {
@@ -28,8 +29,11 @@ function App() {
 
   return (
     <Provider store={store}>
-      <PaperProvider>
-        <StatusBar barStyle="dark-content" backgroundColor="#f7f9fb" />
+      <PaperProvider theme={APP_THEME}>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={COLORS.background}
+        />
         <AppNavigator />
       </PaperProvider>
     </Provider>

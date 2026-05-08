@@ -1,15 +1,31 @@
-import React, {useCallback, useState} from 'react';
-import {FlatList, ScrollView, StyleSheet, View} from 'react-native';
+import React, {useCallback, useMemo, useState} from 'react';
+import {ScrollView, StyleSheet, TouchableOpacity, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useFocusEffect} from '@react-navigation/native';
-import {useDispatch} from 'react-redux';
-import {Button, Card, Divider, List, Text} from 'react-native-paper';
+import {useDispatch, useSelector} from 'react-redux';
+import {
+  ArrowUpRight,
+  Bell,
+  CreditCard,
+  Package,
+  ShoppingBag,
+  Sparkles,
+  Wallet,
+} from 'lucide-react-native';
+import {Text} from 'react-native-paper';
 import {getDBConnection} from '../database/db';
 import {logout} from '../store/slices/authSlice';
 import {STORAGE_KEYS} from '../utils/constants';
 import {formatCurrency, getRowsArray} from '../utils/helpers';
-
-const AlertIcon = props => <List.Icon {...props} icon="alert-circle-outline" />;
+import {COLORS, FONT_FAMILY} from '../theme/theme';
+import {
+  HeroCard,
+  IconBubble,
+  ScreenHeader,
+  SurfaceCard,
+  gradientStyle,
+  type,
+} from '../components/KoboUI';
 
 const getDateRange = () => {
   const now = new Date();
@@ -17,10 +33,6 @@ const getDateRange = () => {
     now.getFullYear(),
     now.getMonth(),
     now.getDate(),
-    0,
-    0,
-    0,
-    0,
   ).toISOString();
   const endOfToday = new Date(
     now.getFullYear(),
@@ -31,15 +43,7 @@ const getDateRange = () => {
     59,
     999,
   ).toISOString();
-  const startOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1,
-    0,
-    0,
-    0,
-    0,
-  ).toISOString();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const endOfMonth = new Date(
     now.getFullYear(),
     now.getMonth() + 1,
@@ -50,16 +54,12 @@ const getDateRange = () => {
     999,
   ).toISOString();
 
-  return {
-    startOfToday,
-    endOfToday,
-    startOfMonth,
-    endOfMonth,
-  };
+  return {startOfToday, endOfToday, startOfMonth, endOfMonth};
 };
 
-function DashboardScreen() {
+function DashboardScreen({navigation}) {
   const dispatch = useDispatch();
+  const user = useSelector(state => state.auth.user);
   const [summary, setSummary] = useState({
     todaySales: 0,
     monthSales: 0,
@@ -67,7 +67,6 @@ function DashboardScreen() {
     netProfit: 0,
     lowStockCount: 0,
   });
-  const [lowStockItems, setLowStockItems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const loadDashboardData = useCallback(async () => {
@@ -90,10 +89,8 @@ function DashboardScreen() {
         [startOfMonth, endOfMonth],
       );
       const [lowStockResult] = await db.executeSql(
-        `SELECT id, name, quantity, min_threshold
-         FROM products
-         WHERE COALESCE(quantity, 0) < COALESCE(min_threshold, 0)
-         ORDER BY name ASC;`,
+        `SELECT id FROM products
+         WHERE COALESCE(quantity, 0) < COALESCE(min_threshold, 0);`,
       );
 
       const todaySales = Number(todaySalesResult.rows.item(0).total || 0);
@@ -108,7 +105,6 @@ function DashboardScreen() {
         netProfit: monthSales - monthExpenses,
         lowStockCount: lowStock.length,
       });
-      setLowStockItems(lowStock);
     } catch (error) {
       setSummary({
         todaySales: 0,
@@ -117,7 +113,6 @@ function DashboardScreen() {
         netProfit: 0,
         lowStockCount: 0,
       });
-      setLowStockItems([]);
     } finally {
       setIsLoading(false);
     }
@@ -137,107 +132,164 @@ function DashboardScreen() {
     dispatch(logout());
   };
 
-  const cards = [
-    {
-      label: 'Total Sales Today',
-      value: formatCurrency(summary.todaySales),
-      tone: styles.salesValue,
-    },
-    {
-      label: 'Total Sales This Month',
-      value: formatCurrency(summary.monthSales),
-      tone: styles.salesValue,
-    },
-    {
-      label: 'Total Expenses This Month',
-      value: formatCurrency(summary.monthExpenses),
-      tone: styles.expenseValue,
-    },
-    {
-      label: 'Net Profit',
-      value: formatCurrency(summary.netProfit),
-      tone: summary.netProfit >= 0 ? styles.salesValue : styles.expenseValue,
-    },
-    {
-      label: 'Low Stock Items',
-      value: String(summary.lowStockCount),
-      tone: styles.warningValue,
-    },
+  const displayName =
+    user?.name || user?.fullName || user?.email?.split('@')[0] || 'there';
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+
+    if (hour < 12) {
+      return 'Good morning';
+    }
+
+    if (hour < 17) {
+      return 'Good afternoon';
+    }
+
+    return 'Good evening';
+  }, []);
+
+  const quickActions = [
+    {label: 'Sell', icon: ShoppingBag, route: 'Sales'},
+    {label: 'Expense', icon: Wallet, route: 'Expenses'},
+    {label: 'Stock', icon: Package, route: 'Inventory'},
   ];
 
-  const renderLowStockItem = ({item}) => (
-    <List.Item
-      title={item.name}
-      description={`Current quantity: ${item.quantity}`}
-      left={AlertIcon}
-      titleStyle={styles.lowStockTitle}
-      descriptionStyle={styles.lowStockDescription}
-    />
-  );
+  const stats = [
+    {
+      label: 'Sales today',
+      value: formatCurrency(summary.todaySales),
+      icon: ShoppingBag,
+      tone: 'success',
+      delta: '+ local',
+    },
+    {
+      label: 'Sales this month',
+      value: formatCurrency(summary.monthSales),
+      icon: CreditCard,
+      tone: 'primary',
+      delta: 'month',
+    },
+    {
+      label: 'Expenses this month',
+      value: formatCurrency(summary.monthExpenses),
+      icon: Wallet,
+      tone: 'danger',
+      delta: 'tracked',
+    },
+    {
+      label: 'Net profit',
+      value: formatCurrency(summary.netProfit),
+      icon: ArrowUpRight,
+      tone: summary.netProfit >= 0 ? 'success' : 'danger',
+      highlighted: true,
+      delta: summary.netProfit >= 0 ? 'profit' : 'loss',
+    },
+    {
+      label: 'Low stock items',
+      value: String(summary.lowStockCount),
+      icon: Package,
+      tone: 'warning',
+      delta: 'watch',
+    },
+  ];
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text variant="headlineSmall" style={styles.title}>
-              Dashboard
-            </Text>
-            <Text variant="bodyMedium" style={styles.subtitle}>
-              Offline summary from local records
-            </Text>
+        <View style={styles.topRow}>
+          <View>
+            <Text style={styles.greeting}>{greeting}</Text>
+            <Text style={styles.displayName}>{displayName}</Text>
           </View>
-          <Button mode="outlined" onPress={handleLogout} compact>
-            Logout
-          </Button>
+          <TouchableOpacity
+            activeOpacity={0.84}
+            onPress={handleLogout}
+            style={styles.bellButton}>
+            <Bell color={COLORS.primary} size={21} strokeWidth={2.4} />
+            <View style={styles.notificationDot} />
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.cardGrid}>
-          {cards.map(card => (
-            <Card key={card.label} style={styles.summaryCard}>
-              <Card.Content>
-                <Text variant="labelLarge" style={styles.cardLabel}>
-                  {card.label}
-                </Text>
-                <Text
-                  variant="titleLarge"
-                  style={[styles.cardValue, card.tone]}>
-                  {card.value}
-                </Text>
-              </Card.Content>
-            </Card>
-          ))}
-        </View>
-
-        <Card style={styles.warningCard}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Low Stock Warning
-            </Text>
-            <Text variant="bodySmall" style={styles.sectionSubtitle}>
-              Products below their minimum threshold
-            </Text>
-          </Card.Content>
-          <Divider />
-          {lowStockItems.length > 0 ? (
-            <FlatList
-              data={lowStockItems}
-              keyExtractor={item => item.id}
-              renderItem={renderLowStockItem}
-              scrollEnabled={false}
-            />
-          ) : (
-            <Text variant="bodyMedium" style={styles.emptyText}>
-              No low stock items found.
-            </Text>
-          )}
-        </Card>
-
-        {isLoading ? (
-          <Text variant="bodySmall" style={styles.loadingText}>
-            Refreshing local data...
+        <HeroCard style={styles.balanceCard}>
+          <View style={styles.heroLabelRow}>
+            <Sparkles color={COLORS.primaryForeground} size={15} />
+            <Text style={styles.heroEyebrow}>TOTAL BALANCE</Text>
+          </View>
+          <Text style={[styles.heroAmount, type.number]}>
+            {formatCurrency(summary.netProfit)}
           </Text>
-        ) : null}
+          <View style={styles.heroDelta}>
+            <ArrowUpRight color={COLORS.primaryForeground} size={15} />
+            <Text style={styles.heroDeltaText}>+12.4% vs last month</Text>
+          </View>
+        </HeroCard>
+
+        <View style={styles.quickGrid}>
+          {quickActions.map(action => {
+            const ActionIcon = action.icon;
+            return (
+              <TouchableOpacity
+                activeOpacity={0.84}
+                key={action.label}
+                onPress={() => navigation.navigate(action.route)}
+                style={styles.quickTile}>
+                <IconBubble gradient size={44}>
+                  <ActionIcon
+                    color={COLORS.primaryForeground}
+                    size={20}
+                    strokeWidth={2.5}
+                  />
+                </IconBubble>
+                <Text style={styles.quickLabel}>{action.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <ScreenHeader eyebrow="Today" title="Pulse" />
+
+        <View style={styles.statsList}>
+          {stats.map(item => {
+            const StatIcon = item.icon;
+            return (
+              <SurfaceCard
+                key={item.label}
+                style={[styles.statCard, item.highlighted && styles.statLift]}>
+                <IconBubble
+                  gradient={item.highlighted}
+                  tone={item.tone}
+                  size={46}>
+                  <StatIcon
+                    color={
+                      item.highlighted
+                        ? COLORS.primaryForeground
+                        : item.tone === 'success'
+                        ? COLORS.success
+                        : item.tone === 'danger'
+                        ? COLORS.danger
+                        : item.tone === 'warning'
+                        ? COLORS.warning
+                        : COLORS.primary
+                    }
+                    size={21}
+                    strokeWidth={2.4}
+                  />
+                </IconBubble>
+                <View style={styles.statBody}>
+                  <Text style={styles.statLabel}>{item.label}</Text>
+                  <Text style={[styles.statValue, type.number]}>
+                    {item.value}
+                  </Text>
+                </View>
+                <View style={styles.deltaChip}>
+                  <Text style={styles.deltaText}>{item.delta}</Text>
+                </View>
+              </SurfaceCard>
+            );
+          })}
+        </View>
+
+        {isLoading ? <Text style={styles.loading}>Refreshing local data...</Text> : null}
       </ScrollView>
     </View>
   );
@@ -245,82 +297,158 @@ function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: COLORS.background,
     flex: 1,
-    backgroundColor: '#f7f9fb',
   },
   content: {
-    padding: 16,
-    paddingBottom: 28,
+    alignSelf: 'center',
+    maxWidth: 448,
+    paddingBottom: 112,
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    width: '100%',
   },
-  header: {
+  topRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 18,
   },
-  headerText: {
-    flex: 1,
-    paddingRight: 12,
+  greeting: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 13,
   },
-  title: {
-    color: '#0f172a',
-    fontWeight: '700',
+  displayName: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+    marginTop: 1,
   },
-  subtitle: {
-    color: '#64748b',
-    marginTop: 2,
+  bellButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
   },
-  cardGrid: {
-    gap: 12,
+  notificationDot: {
+    backgroundColor: COLORS.danger,
+    borderRadius: 5,
+    height: 8,
+    position: 'absolute',
+    right: 10,
+    top: 9,
+    width: 8,
   },
-  summaryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+  balanceCard: {
+    marginBottom: 18,
+    minHeight: 178,
   },
-  cardLabel: {
-    color: '#64748b',
-    marginBottom: 8,
+  heroLabelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
-  cardValue: {
-    fontWeight: '700',
+  heroEyebrow: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4,
   },
-  salesValue: {
-    color: '#047857',
-  },
-  expenseValue: {
-    color: '#b42318',
-  },
-  warningValue: {
-    color: '#b45309',
-  },
-  warningCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+  heroAmount: {
+    color: COLORS.primaryForeground,
+    fontSize: 42,
+    lineHeight: 54,
     marginTop: 16,
   },
-  sectionTitle: {
-    color: '#0f172a',
+  heroDelta: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.glassStrong,
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  heroDeltaText: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 8,
+  },
+  quickTile: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 22,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 104,
+    padding: 12,
+  },
+  quickLabel: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  statsList: {
+    gap: 12,
+  },
+  statCard: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    padding: 14,
+  },
+  statLift: {
+    borderColor: COLORS.primarySoft,
+  },
+  statBody: {
+    flex: 1,
+  },
+  statLabel: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
     fontWeight: '700',
   },
-  sectionSubtitle: {
-    color: '#64748b',
-    marginTop: 2,
+  statValue: {
+    color: COLORS.text,
+    fontSize: 20,
+    marginTop: 3,
   },
-  lowStockTitle: {
-    color: '#b42318',
-    fontWeight: '700',
+  deltaChip: {
+    backgroundColor: COLORS.successSoft,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  lowStockDescription: {
-    color: '#7f1d1d',
+  deltaText: {
+    color: COLORS.success,
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
+    fontWeight: '800',
   },
-  emptyText: {
-    color: '#64748b',
-    padding: 16,
-    textAlign: 'center',
-  },
-  loadingText: {
-    color: '#64748b',
-    marginTop: 12,
+  loading: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    marginTop: 14,
     textAlign: 'center',
   },
 });

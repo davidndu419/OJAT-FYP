@@ -1,9 +1,9 @@
 {
   "name": "OfflineFinanceApp",
-  "displayName": "OfflineFinanceApp",
+  "displayName": "TradeEase",
   "expo": {
-    "name": "OJAT",
-    "slug": "ojat-app",
+    "name": "TradeEase",
+    "slug": "tradeease-app",
     "version": "1.0.0",
     "android": {
       "package": "com.offlinefinanceapp",

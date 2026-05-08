@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --background: #fafafe;
+  --foreground: #211b32;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+#root > div {
+  min-height: 100%;
+  height: 100%;
+  display: flex;
+}
+
+body {
+  background: var(--background);
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  color: var(--foreground);
+}
+
+* {
+  box-sizing: border-box;
+}

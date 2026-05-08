@@ -15,6 +15,7 @@ import {
 } from 'react-native-paper';
 import {getDBConnection} from '../database/db';
 import {generateId, getCurrentTimestamp} from '../utils/helpers';
+import {COLORS, FONT_FAMILY} from '../theme/theme';
 
 const createInitialForm = product => ({
   name: product?.name ? String(product.name) : '',
@@ -295,7 +296,7 @@ function AddEditProductScreen({navigation, route}) {
           <Button
             mode="outlined"
             onPress={handleDelete}
-            textColor="#b42318"
+            textColor={COLORS.danger}
             style={styles.deleteButton}>
             Delete Product
           </Button>
@@ -315,35 +316,38 @@ function AddEditProductScreen({navigation, route}) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f9fb',
+    backgroundColor: COLORS.background,
   },
   content: {
     padding: 16,
     paddingBottom: 36,
   },
   title: {
-    color: '#0f172a',
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
     fontWeight: '700',
   },
   subtitle: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
     marginBottom: 18,
     marginTop: 4,
   },
   input: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.surface,
   },
   formError: {
-    color: '#b42318',
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
     marginBottom: 12,
   },
   primaryButton: {
-    borderRadius: 6,
+    borderRadius: 8,
     marginTop: 8,
   },
   deleteButton: {
-    borderColor: '#b42318',
-    borderRadius: 6,
+    borderColor: COLORS.danger,
+    borderRadius: 8,
     marginTop: 12,
   },
 });

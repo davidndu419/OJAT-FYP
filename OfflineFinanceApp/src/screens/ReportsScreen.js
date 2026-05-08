@@ -1,28 +1,13 @@
 import React, {useCallback, useMemo, useState} from 'react';
-import {Dimensions, ScrollView, StyleSheet, View} from 'react-native';
+import {ScrollView, StyleSheet, TextInput, TouchableOpacity, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {
-  Button,
-  Card,
-  DataTable,
-  HelperText,
-  Text,
-  TextInput,
-} from 'react-native-paper';
-import {BarChart, PieChart} from 'react-native-chart-kit';
-import {format, formatISO, isValid, parseISO} from 'date-fns';
+import {ChevronLeft, ChevronRight, Star, TrendingUp} from 'lucide-react-native';
+import {Text} from 'react-native-paper';
+import {format, formatISO, isValid, parseISO, subDays} from 'date-fns';
 import {getDBConnection} from '../database/db';
 import {formatCurrency, getRowsArray} from '../utils/helpers';
-
-const chartColors = [
-  '#0b6bcb',
-  '#047857',
-  '#b45309',
-  '#b42318',
-  '#7c3aed',
-  '#0f766e',
-  '#be123c',
-];
+import {COLORS, FONT_FAMILY} from '../theme/theme';
+import {HeroCard, IconBubble, KoboButton, ScreenHeader, SurfaceCard, gradientStyle, type} from '../components/KoboUI';
 
 const formatDateInput = date => format(date, 'yyyy-MM-dd');
 
@@ -57,40 +42,28 @@ const buildRange = (fromInput, toInput) => {
   return {
     fromDate,
     toDate,
-    startDate: formatISO(
-      new Date(
-        fromDate.getFullYear(),
-        fromDate.getMonth(),
-        fromDate.getDate(),
-        0,
-        0,
-        0,
-        0,
-      ),
-    ),
+    startDate: formatISO(new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())),
     endDate: formatISO(
-      new Date(
-        toDate.getFullYear(),
-        toDate.getMonth(),
-        toDate.getDate(),
-        23,
-        59,
-        59,
-        999,
-      ),
+      new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999),
     ),
   };
 };
 
-const chartConfig = {
-  backgroundGradientFrom: '#ffffff',
-  backgroundGradientTo: '#ffffff',
-  color: opacity => `rgba(11, 107, 203, ${opacity})`,
-  decimalPlaces: 0,
-  labelColor: opacity => `rgba(15, 23, 42, ${opacity})`,
-  propsForBackgroundLines: {
-    stroke: '#e5e7eb',
-  },
+const buildSevenDays = dailySales => {
+  const today = new Date();
+  const salesMap = dailySales.reduce((acc, item) => {
+    acc[item.day] = Number(item.total || 0);
+    return acc;
+  }, {});
+
+  return Array.from({length: 7}).map((_, index) => {
+    const date = subDays(today, 6 - index);
+    const key = formatDateInput(date);
+    return {
+      label: format(date, 'EEEEE'),
+      value: salesMap[key] || 0,
+    };
+  });
 };
 
 function ReportsScreen() {
@@ -108,8 +81,6 @@ function ReportsScreen() {
     bestSellingProduct: 'None',
     mostExpensiveCategory: 'None',
   });
-
-  const chartWidth = Math.max(Dimensions.get('window').width - 48, 300);
 
   const loadReport = useCallback(async (fromInput, toInput) => {
     const range = buildRange(fromInput, toInput);
@@ -240,337 +211,358 @@ function ReportsScreen() {
     updateDate(field, formatDateInput(nextDate));
   };
 
-  const hasSalesData = report.dailySales.length > 0;
-  const hasExpenseData = report.expensesByCategory.length > 0;
-  const hasAnyData =
-    hasSalesData ||
-    hasExpenseData ||
-    report.totalRevenue > 0 ||
-    report.totalExpenses > 0;
-
-  const barChartData = {
-    labels: report.dailySales.map(item => format(parseISO(item.day), 'MMM d')),
-    datasets: [
-      {
-        data: report.dailySales.map(item => Number(item.total || 0)),
-      },
-    ],
-  };
-
-  const pieChartData = report.expensesByCategory.map((item, index) => ({
-    name: item.category,
-    population: Number(item.total || 0),
-    color: chartColors[index % chartColors.length],
-    legendFontColor: '#334155',
-    legendFontSize: 12,
-  }));
+  const sevenDays = useMemo(() => buildSevenDays(report.dailySales), [report.dailySales]);
+  const maxBar = Math.max(...sevenDays.map(item => item.value), 1);
+  const pnlRows = [
+    ['Total revenue', formatCurrency(report.totalRevenue)],
+    ['Total expenses', formatCurrency(report.totalExpenses)],
+    ['Net profit', formatCurrency(report.netProfit), true],
+    ['Best selling product', report.bestSellingProduct, false, 'star'],
+    ['Most expensive category', report.mostExpensiveCategory],
+  ];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text variant="headlineSmall" style={styles.title}>
-        Reports
-      </Text>
-      <Text variant="bodyMedium" style={styles.subtitle}>
-        Analyze local sales, expenses, and profitability.
-      </Text>
+      <ScreenHeader
+        eyebrow="Reports"
+        title="Insights"
+        subtitle="Analyze sales, expenses, and profitability."
+      />
 
-      <Card style={styles.filterCard}>
-        <Card.Content>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Date Range
-          </Text>
+      <SurfaceCard style={styles.filterCard}>
+        <Text style={styles.cardTitle}>Date Range</Text>
+        <DateField
+          label="From"
+          value={fromDate}
+          onChangeText={value => updateDate('from', value)}
+          onBack={() => shiftDate('from', -1)}
+          onForward={() => shiftDate('from', 1)}
+        />
+        <DateField
+          label="To"
+          value={toDate}
+          onChangeText={value => updateDate('to', value)}
+          onBack={() => shiftDate('to', -1)}
+          onForward={() => shiftDate('to', 1)}
+        />
+        {errors.date ? <Text style={styles.errorText}>{errors.date}</Text> : null}
+        {errors.form ? <Text style={styles.errorText}>{errors.form}</Text> : null}
+        <KoboButton
+          onPress={() => loadReport(fromDate, toDate)}
+          loading={isLoading}
+          disabled={isLoading}>
+          Apply Filter
+        </KoboButton>
+      </SurfaceCard>
 
-          <View style={styles.dateBlock}>
-            <Text variant="labelLarge" style={styles.dateLabel}>
-              From
+      <HeroCard variant="success" style={styles.profitHero}>
+        <View style={styles.heroRow}>
+          <TrendingUp color={COLORS.primaryForeground} size={18} />
+          <Text style={styles.heroEyebrow}>NET PROFIT</Text>
+        </View>
+        <Text style={[styles.profitAmount, type.number]}>
+          {formatCurrency(report.netProfit)}
+        </Text>
+        <View style={styles.glassRow}>
+          <View style={styles.glassTile}>
+            <Text style={styles.glassLabel}>Revenue</Text>
+            <Text style={[styles.glassValue, type.number]}>
+              {formatCurrency(report.totalRevenue)}
             </Text>
-            <View style={styles.datePickerRow}>
-              <Button
-                mode="contained-tonal"
-                onPress={() => shiftDate('from', -1)}
-                compact
-                style={styles.dateButton}
-                labelStyle={styles.dateButtonLabel}>
-                {'<'}
-              </Button>
-              <TextInput
-                value={fromDate}
-                onChangeText={value => updateDate('from', value)}
-                mode="outlined"
-                style={styles.dateInput}
-                error={Boolean(errors.date)}
-              />
-              <Button
-                mode="contained-tonal"
-                onPress={() => shiftDate('from', 1)}
-                compact
-                style={styles.dateButton}
-                labelStyle={styles.dateButtonLabel}>
-                {'>'}
-              </Button>
-            </View>
           </View>
-
-          <View style={styles.dateBlock}>
-            <Text variant="labelLarge" style={styles.dateLabel}>
-              To
+          <View style={styles.glassTile}>
+            <Text style={styles.glassLabel}>Expenses</Text>
+            <Text style={[styles.glassValue, type.number]}>
+              {formatCurrency(report.totalExpenses)}
             </Text>
-            <View style={styles.datePickerRow}>
-              <Button
-                mode="contained-tonal"
-                onPress={() => shiftDate('to', -1)}
-                compact
-                style={styles.dateButton}
-                labelStyle={styles.dateButtonLabel}>
-                {'<'}
-              </Button>
-              <TextInput
-                value={toDate}
-                onChangeText={value => updateDate('to', value)}
-                mode="outlined"
-                style={styles.dateInput}
-                error={Boolean(errors.date)}
-              />
-              <Button
-                mode="contained-tonal"
-                onPress={() => shiftDate('to', 1)}
-                compact
-                style={styles.dateButton}
-                labelStyle={styles.dateButtonLabel}>
-                {'>'}
-              </Button>
-            </View>
           </View>
+        </View>
+      </HeroCard>
 
-          <HelperText type="error" visible={Boolean(errors.date)}>
-            {errors.date}
-          </HelperText>
-
-          {errors.form ? (
-            <Text variant="bodySmall" style={styles.formError}>
-              {errors.form}
-            </Text>
-          ) : null}
-
-          <Button
-            mode="contained"
-            onPress={() => loadReport(fromDate, toDate)}
-            loading={isLoading}
-            disabled={isLoading}
-            style={styles.primaryButton}>
-            Apply Filter
-          </Button>
-        </Card.Content>
-      </Card>
-
-      {!hasAnyData ? (
-        <Card style={styles.emptyCard}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.emptyTitle}>
-              No report data found
-            </Text>
-            <Text variant="bodyMedium" style={styles.emptyText}>
-              Record sales or expenses within this date range to view charts.
-            </Text>
-          </Card.Content>
-        </Card>
-      ) : (
-        <>
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Daily Sales
-              </Text>
-              {hasSalesData ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <BarChart
-                    data={barChartData}
-                    width={Math.max(chartWidth, report.dailySales.length * 72)}
-                    height={240}
-                    chartConfig={chartConfig}
-                    fromZero
-                    showValuesOnTopOfBars
-                    style={styles.chart}
-                  />
-                </ScrollView>
-              ) : (
-                <Text variant="bodyMedium" style={styles.emptyText}>
-                  No sales found for this date range.
-                </Text>
-              )}
-            </Card.Content>
-          </Card>
-
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Expenses by Category
-              </Text>
-              {hasExpenseData ? (
-                <PieChart
-                  data={pieChartData}
-                  width={chartWidth}
-                  height={230}
-                  chartConfig={chartConfig}
-                  accessor="population"
-                  backgroundColor="transparent"
-                  paddingLeft="8"
-                  absolute
+      <SurfaceCard style={styles.chartCard}>
+        <Text style={styles.cardTitle}>Daily Sales</Text>
+        <View style={styles.barChart}>
+          {sevenDays.map((item, index) => {
+            const height = 26 + (item.value / maxBar) * 116;
+            const isLast = index === sevenDays.length - 1;
+            return (
+              <View key={`${item.label}-${index}`} style={styles.barItem}>
+                <View
+                  style={[
+                    styles.bar,
+                    {height},
+                    isLast ? gradientStyle('primary') : styles.barSoft,
+                  ]}
                 />
-              ) : (
-                <Text variant="bodyMedium" style={styles.emptyText}>
-                  No expenses found for this date range.
-                </Text>
-              )}
-            </Card.Content>
-          </Card>
+                <Text style={styles.barLabel}>{item.label}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </SurfaceCard>
 
-          <Card style={styles.tableCard}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Profit and Loss
+      <SurfaceCard style={styles.chartCard}>
+        <Text style={styles.cardTitle}>Expenses by Category</Text>
+        {report.expensesByCategory.length > 0 ? (
+          report.expensesByCategory.map(item => (
+            <View key={item.category} style={styles.categoryRow}>
+              <Text style={styles.categoryName}>{item.category}</Text>
+              <Text style={[styles.categoryValue, type.number]}>
+                {formatCurrency(item.total)}
               </Text>
-            </Card.Content>
-            <DataTable>
-              <DataTable.Row>
-                <DataTable.Cell>Total Revenue</DataTable.Cell>
-                <DataTable.Cell numeric>
-                  {formatCurrency(report.totalRevenue)}
-                </DataTable.Cell>
-              </DataTable.Row>
-              <DataTable.Row>
-                <DataTable.Cell>Total Expenses</DataTable.Cell>
-                <DataTable.Cell numeric>
-                  {formatCurrency(report.totalExpenses)}
-                </DataTable.Cell>
-              </DataTable.Row>
-              <DataTable.Row>
-                <DataTable.Cell>Net Profit</DataTable.Cell>
-                <DataTable.Cell numeric>
-                  <Text
-                    style={[
-                      styles.netProfit,
-                      report.netProfit < 0 && styles.netLoss,
-                    ]}>
-                    {formatCurrency(report.netProfit)}
-                  </Text>
-                </DataTable.Cell>
-              </DataTable.Row>
-              <DataTable.Row>
-                <DataTable.Cell>Best Selling Product</DataTable.Cell>
-                <DataTable.Cell numeric>
-                  {report.bestSellingProduct}
-                </DataTable.Cell>
-              </DataTable.Row>
-              <DataTable.Row>
-                <DataTable.Cell>Most Expensive Category</DataTable.Cell>
-                <DataTable.Cell numeric>
-                  {report.mostExpensiveCategory}
-                </DataTable.Cell>
-              </DataTable.Row>
-            </DataTable>
-          </Card>
-        </>
-      )}
+            </View>
+          ))
+        ) : (
+          <Text style={styles.emptyText}>No expenses found for this date range.</Text>
+        )}
+      </SurfaceCard>
+
+      <SurfaceCard style={styles.pnlCard}>
+        <Text style={styles.cardTitle}>Profit and Loss</Text>
+        {pnlRows.map(row => (
+          <View key={row[0]} style={[styles.pnlRow, row[2] && styles.pnlHighlight]}>
+            <View style={styles.pnlLabelWrap}>
+              {row[3] === 'star' ? (
+                <Star color={COLORS.warning} size={17} fill={COLORS.warning} />
+              ) : null}
+              <Text style={[styles.pnlLabel, row[2] && styles.pnlLabelStrong]}>
+                {row[0]}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.pnlValue,
+                type.number,
+                row[2] && styles.pnlValueStrong,
+              ]}>
+              {row[1]}
+            </Text>
+          </View>
+        ))}
+      </SurfaceCard>
     </ScrollView>
+  );
+}
+
+function DateField({label, value, onChangeText, onBack, onForward}) {
+  return (
+    <View style={styles.dateBlock}>
+      <Text style={styles.dateLabel}>{label}</Text>
+      <View style={styles.dateRow}>
+        <TouchableOpacity activeOpacity={0.84} onPress={onBack} style={styles.dateButton}>
+          <ChevronLeft color={COLORS.primary} size={18} />
+        </TouchableOpacity>
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          style={styles.dateInput}
+          placeholderTextColor={COLORS.muted}
+        />
+        <TouchableOpacity activeOpacity={0.84} onPress={onForward} style={styles.dateButton}>
+          <ChevronRight color={COLORS.primary} size={18} />
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: COLORS.background,
     flex: 1,
-    backgroundColor: '#f7f9fb',
   },
   content: {
-    padding: 16,
-    paddingBottom: 36,
-  },
-  title: {
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#64748b',
-    marginBottom: 16,
-    marginTop: 4,
+    alignSelf: 'center',
+    maxWidth: 448,
+    paddingBottom: 112,
+    paddingHorizontal: 20,
+    width: '100%',
   },
   filterCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+    gap: 10,
   },
-  sectionTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
-    marginBottom: 10,
+  cardTitle: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 6,
   },
   dateBlock: {
-    marginBottom: 10,
+    gap: 5,
   },
   dateLabel: {
-    color: '#475569',
-    marginBottom: 4,
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
-  datePickerRow: {
+  dateRow: {
     alignItems: 'center',
     flexDirection: 'row',
-  },
-  dateInput: {
-    backgroundColor: '#ffffff',
-    flex: 1,
+    gap: 8,
   },
   dateButton: {
-    borderRadius: 6,
-    minWidth: 42,
-    marginHorizontal: 2,
+    alignItems: 'center',
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 16,
+    height: 44,
+    justifyContent: 'center',
+    width: 42,
   },
-  dateButtonLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginHorizontal: 0,
+  dateInput: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    flex: 1,
+    fontFamily: FONT_FAMILY,
+    minHeight: 48,
+    paddingHorizontal: 14,
   },
-  formError: {
-    color: '#b42318',
-    marginBottom: 12,
+  errorText: {
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
   },
-  primaryButton: {
-    borderRadius: 6,
-  },
-  emptyCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+  profitHero: {
     marginTop: 16,
   },
-  emptyTitle: {
-    color: '#0f172a',
+  heroRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  heroEyebrow: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+  },
+  profitAmount: {
+    color: COLORS.primaryForeground,
+    fontSize: 36,
+    marginTop: 12,
+  },
+  glassRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  glassTile: {
+    backgroundColor: COLORS.glass,
+    borderRadius: 18,
+    flex: 1,
+    padding: 12,
+  },
+  glassLabel: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
     fontWeight: '700',
-    textAlign: 'center',
+    opacity: 0.82,
+  },
+  glassValue: {
+    color: COLORS.primaryForeground,
+    fontSize: 15,
+    marginTop: 4,
+  },
+  chartCard: {
+    marginTop: 16,
+  },
+  barChart: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 10,
+    height: 178,
+    justifyContent: 'space-between',
+    paddingTop: 18,
+  },
+  barItem: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  bar: {
+    borderRadius: 999,
+    width: '70%',
+  },
+  barSoft: {
+    backgroundColor: COLORS.primarySoft,
+  },
+  barLabel: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 8,
+  },
+  categoryRow: {
+    alignItems: 'center',
+    borderTopColor: COLORS.line,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  categoryName: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
+  },
+  categoryValue: {
+    color: COLORS.danger,
+    fontSize: 14,
   },
   emptyText: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
     paddingVertical: 12,
     textAlign: 'center',
   },
-  chartCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+  pnlCard: {
     marginTop: 16,
   },
-  chart: {
-    borderRadius: 8,
-    marginTop: 8,
+  pnlRow: {
+    alignItems: 'center',
+    borderTopColor: COLORS.line,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    gap: 10,
   },
-  tableCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    marginTop: 16,
-    overflow: 'hidden',
+  pnlHighlight: {
+    minHeight: 62,
   },
-  netProfit: {
-    color: '#047857',
+  pnlLabelWrap: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pnlLabel: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
     fontWeight: '700',
   },
-  netLoss: {
-    color: '#b42318',
+  pnlLabelStrong: {
+    color: COLORS.primary,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  pnlValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  pnlValueStrong: {
+    color: COLORS.primary,
+    fontSize: 19,
   },
 });
 

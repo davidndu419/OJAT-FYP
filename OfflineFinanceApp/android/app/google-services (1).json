@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1045013112182",
+    "project_id": "ojat-e3336",
+    "storage_bucket": "ojat-e3336.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1045013112182:android:621f8195a8f5631aa2c657",
+        "android_client_info": {
+          "package_name": "com.offlinefinanceapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1045013112182-dopbt8l7racsqdo5hg9jlm97a031br8o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.offlinefinanceapp",
+            "certificate_hash": "7174722a062160658bddb5dc2a47647c75565bbb"
+          }
+        },
+        {
+          "client_id": "1045013112182-opk0h2slj3uo3nu4rftgi1tn23n7fh98.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIZZ8SzOwxo1v_DqMMschqkvhgwg_akho"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1045013112182-opk0h2slj3uo3nu4rftgi1tn23n7fh98.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

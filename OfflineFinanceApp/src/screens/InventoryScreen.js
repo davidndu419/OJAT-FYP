@@ -7,13 +7,17 @@ import {
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
+import {ChevronRight, Package, Search} from 'lucide-react-native';
 import {Text} from 'react-native-paper';
 import {getDBConnection} from '../database/db';
 import {formatCurrency, getRowsArray} from '../utils/helpers';
+import {COLORS, FONT_FAMILY} from '../theme/theme';
+import {IconBubble, ScreenHeader, SurfaceCard, gradientStyle, type} from '../components/KoboUI';
 
 function InventoryScreen({navigation}) {
   const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
 
   const loadProducts = useCallback(async () => {
@@ -37,21 +41,38 @@ function InventoryScreen({navigation}) {
     }, [loadProducts]),
   );
 
+  const counts = useMemo(() => {
+    const low = products.filter(
+      item => Number(item.quantity || 0) < Number(item.min_threshold || 0),
+    ).length;
+
+    return {all: products.length, low, ok: products.length - low};
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    if (!query) {
-      return products;
-    }
+    return products.filter(product => {
+      const isLow =
+        Number(product.quantity || 0) < Number(product.min_threshold || 0);
+      const matchesFilter =
+        filter === 'all' || (filter === 'low' ? isLow : !isLow);
+      const matchesSearch =
+        !query || String(product.name || '').toLowerCase().includes(query);
 
-    return products.filter(product =>
-      product.name.toLowerCase().includes(query),
-    );
-  }, [products, searchQuery]);
+      return matchesFilter && matchesSearch;
+    });
+  }, [filter, products, searchQuery]);
 
   const navigateToProductForm = product => {
     navigation.navigate('AddEditProduct', product ? {product} : undefined);
   };
+
+  const filters = [
+    {key: 'all', label: 'All', count: counts.all},
+    {key: 'low', label: 'Low', count: counts.low},
+    {key: 'ok', label: 'OK', count: counts.ok},
+  ];
 
   const renderProduct = ({item}) => {
     const isLowStock =
@@ -59,47 +80,78 @@ function InventoryScreen({navigation}) {
 
     return (
       <TouchableOpacity
-        activeOpacity={0.78}
-        onPress={() => navigateToProductForm(item)}
-        style={[styles.productRow, isLowStock && styles.lowStockRow]}>
-        <View style={styles.productContent}>
-          <View style={styles.productDetails}>
-            <Text
-              variant="titleMedium"
-              style={[styles.productTitle, isLowStock && styles.lowStockText]}>
-              {item.name}
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={[
-                styles.productDescription,
-                isLowStock && styles.lowStockText,
-              ]}>
-              {item.category || 'Uncategorized'} | Qty: {item.quantity} |{' '}
-              {formatCurrency(item.selling_price)}
+        activeOpacity={0.84}
+        onPress={() => navigateToProductForm(item)}>
+        <SurfaceCard style={styles.productCard}>
+          <IconBubble tone={isLowStock ? 'danger' : 'primary'} size={46}>
+            <Package
+              color={isLowStock ? COLORS.danger : COLORS.primary}
+              size={21}
+              strokeWidth={2.4}
+            />
+          </IconBubble>
+          <View style={styles.productBody}>
+            <View style={styles.productTitleRow}>
+              <Text style={styles.productTitle} numberOfLines={1}>
+                {item.name}
+              </Text>
+              {isLowStock ? <Text style={styles.lowBadge}>LOW</Text> : null}
+            </View>
+            <Text style={styles.productMeta} numberOfLines={1}>
+              {item.category || 'SKU'} · Qty {item.quantity || 0}
             </Text>
           </View>
-
-          <Text
-            variant="titleMedium"
-            style={[styles.chevronText, isLowStock && styles.lowStockText]}>
-            &gt;
-          </Text>
-        </View>
+          <View style={styles.priceBlock}>
+            <Text style={[styles.price, type.number]}>
+              {formatCurrency(item.selling_price)}
+            </Text>
+            <ChevronRight color={COLORS.muted} size={18} />
+          </View>
+        </SurfaceCard>
       </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <TextInput
-          placeholder="Search products"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={styles.searchInput}
-          placeholderTextColor="#94a3b8"
-        />
+      <View style={styles.shell}>
+        <ScreenHeader eyebrow="Inventory" title="Stock" />
+
+        <View style={styles.searchWrap}>
+          <Search
+            color={COLORS.muted}
+            size={19}
+            strokeWidth={2.4}
+            style={styles.searchIcon}
+          />
+          <TextInput
+            placeholder="Search products"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+            placeholderTextColor={COLORS.muted}
+          />
+        </View>
+
+        <View style={styles.filterGrid}>
+          {filters.map(item => {
+            const active = item.key === filter;
+            return (
+              <TouchableOpacity
+                activeOpacity={0.84}
+                key={item.key}
+                onPress={() => setFilter(item.key)}
+                style={[
+                  styles.filterPill,
+                  active && gradientStyle('primary'),
+                ]}>
+                <Text style={[styles.filterText, active && styles.filterTextOn]}>
+                  {item.label} {item.count}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         <FlatList
           data={filteredProducts}
@@ -112,23 +164,16 @@ function InventoryScreen({navigation}) {
             filteredProducts.length === 0 && styles.emptyListContent,
           ]}
           ListEmptyComponent={
-            <Text variant="bodyLarge" style={styles.emptyText}>
-              No products found.
-            </Text>
+            <Text style={styles.emptyText}>No products found.</Text>
           }
         />
       </View>
 
       <TouchableOpacity
-        activeOpacity={0.85}
-        style={styles.addButton}
+        activeOpacity={0.86}
+        style={[styles.addButton, gradientStyle('primary')]}
         onPress={() => navigateToProductForm()}>
-        <Text variant="headlineSmall" style={styles.addButtonSymbol}>
-          +
-        </Text>
-        <Text variant="labelLarge" style={styles.addButtonText}>
-          Product
-        </Text>
+        <Text style={styles.addButtonText}>+ Product</Text>
       </TouchableOpacity>
     </View>
   );
@@ -136,96 +181,134 @@ function InventoryScreen({navigation}) {
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: COLORS.background,
     flex: 1,
-    backgroundColor: '#f7f9fb',
   },
-  content: {
+  shell: {
+    alignSelf: 'center',
     flex: 1,
-    padding: 16,
+    maxWidth: 448,
+    paddingHorizontal: 20,
+    width: '100%',
+  },
+  searchWrap: {
+    marginBottom: 12,
+  },
+  searchIcon: {
+    left: 16,
+    position: 'absolute',
+    top: 16,
+    zIndex: 1,
   },
   searchInput: {
-    backgroundColor: '#ffffff',
-    borderColor: '#d8e0ea',
-    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 18,
     borderWidth: 1,
-    color: '#0f172a',
-    fontSize: 16,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    height: 52,
+    paddingLeft: 46,
+    paddingRight: 16,
+  },
+  filterGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  filterPill: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 42,
+    justifyContent: 'center',
+  },
+  filterText: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  filterTextOn: {
+    color: COLORS.primaryForeground,
   },
   listContent: {
-    paddingBottom: 96,
+    gap: 12,
+    paddingBottom: 124,
   },
   emptyListContent: {
     flexGrow: 1,
     justifyContent: 'center',
   },
-  productRow: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    marginBottom: 10,
-    overflow: 'hidden',
-  },
-  productContent: {
+  productCard: {
     alignItems: 'center',
     flexDirection: 'row',
-    minHeight: 76,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: 12,
+    padding: 14,
   },
-  productDetails: {
+  productBody: {
     flex: 1,
-    paddingRight: 12,
   },
-  lowStockRow: {
-    backgroundColor: '#fff1f2',
-    borderColor: '#fda4af',
-    borderWidth: 1,
+  productTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
   },
   productTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
-    marginBottom: 4,
+    color: COLORS.text,
+    flex: 1,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    fontWeight: '800',
   },
-  productDescription: {
-    color: '#64748b',
+  lowBadge: {
+    backgroundColor: COLORS.dangerSoft,
+    borderRadius: 999,
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
+    fontSize: 10,
+    fontWeight: '800',
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  chevronText: {
-    color: '#94a3b8',
-    fontWeight: '700',
+  productMeta: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    marginTop: 3,
   },
-  lowStockText: {
-    color: '#b42318',
+  priceBlock: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  price: {
+    color: COLORS.text,
+    fontSize: 13,
   },
   emptyText: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
     textAlign: 'center',
   },
   addButton: {
     alignItems: 'center',
-    backgroundColor: '#0b6bcb',
-    borderRadius: 28,
-    bottom: 24,
-    elevation: 4,
-    flexDirection: 'row',
+    borderRadius: 18,
+    bottom: 104,
     minHeight: 56,
-    paddingHorizontal: 18,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
     position: 'absolute',
     right: 20,
-    shadowColor: '#0f172a',
-    shadowOffset: {width: 0, height: 3},
-    shadowOpacity: 0.22,
-    shadowRadius: 5,
-  },
-  addButtonSymbol: {
-    color: '#ffffff',
-    fontWeight: '700',
-    marginRight: 8,
   },
   addButtonText: {
-    color: '#ffffff',
-    fontWeight: '700',
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
   },
 });
 

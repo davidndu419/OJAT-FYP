@@ -5,20 +5,21 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {
-  Button,
-  Card,
-  Divider,
-  HelperText,
-  Snackbar,
-  Text,
-  TextInput,
-} from 'react-native-paper';
-import {formatISO} from 'date-fns';
+  Check,
+  ChevronRight,
+  Minus,
+  Plus,
+  Search,
+  ShoppingBag,
+} from 'lucide-react-native';
+import {Snackbar, Text} from 'react-native-paper';
+import {format, formatISO, parseISO} from 'date-fns';
 import {getDBConnection} from '../database/db';
 import {
   formatCurrency,
@@ -26,6 +27,14 @@ import {
   getCurrentTimestamp,
   getRowsArray,
 } from '../utils/helpers';
+import {COLORS, FONT_FAMILY} from '../theme/theme';
+import {
+  IconBubble,
+  KoboButton,
+  ScreenHeader,
+  SurfaceCard,
+  type,
+} from '../components/KoboUI';
 
 const getTodayRange = () => {
   const now = new Date();
@@ -137,8 +146,7 @@ function SalesScreen() {
     if (!quantity.trim()) {
       nextErrors.quantity = 'Quantity sold is required.';
     } else if (!/^\d+$/.test(quantity.trim()) || soldQuantity <= 0) {
-      nextErrors.quantity =
-        'Quantity must be a whole number greater than zero.';
+      nextErrors.quantity = 'Quantity must be a whole number greater than zero.';
     } else if (selectedProduct && soldQuantity > availableQuantity) {
       nextErrors.quantity = `Only ${availableQuantity} item(s) available.`;
     }
@@ -205,35 +213,32 @@ function SalesScreen() {
 
   const renderProductOption = ({item}) => (
     <TouchableOpacity
-      activeOpacity={0.78}
+      activeOpacity={0.82}
       onPress={() => selectProduct(item)}
       style={styles.optionRow}>
       <View style={styles.optionText}>
-        <Text variant="titleSmall" style={styles.optionTitle}>
-          {item.name}
-        </Text>
-        <Text variant="bodySmall" style={styles.optionSubtitle}>
-          Qty: {item.quantity || 0} | {formatCurrency(item.selling_price)}
+        <Text style={styles.optionTitle}>{item.name}</Text>
+        <Text style={styles.optionSubtitle}>
+          Qty {item.quantity || 0} · {formatCurrency(item.selling_price)}
         </Text>
       </View>
-      <Text variant="titleMedium" style={styles.optionChevron}>
-        &gt;
-      </Text>
+      <ChevronRight color={COLORS.primary} size={18} />
     </TouchableOpacity>
   );
 
   const renderSale = ({item}) => (
     <View style={styles.saleRow}>
+      <IconBubble tone="success" size={42}>
+        <ShoppingBag color={COLORS.success} size={19} strokeWidth={2.4} />
+      </IconBubble>
       <View style={styles.saleDetails}>
-        <Text variant="titleSmall" style={styles.saleTitle}>
-          {item.product_name || 'Deleted product'}
-        </Text>
-        <Text variant="bodySmall" style={styles.saleDescription}>
-          Quantity sold: {item.quantity}
+        <Text style={styles.saleTitle}>{item.product_name || 'Deleted product'}</Text>
+        <Text style={styles.saleDescription}>
+          Qty {item.quantity} · {format(parseISO(item.date), 'p')}
         </Text>
       </View>
-      <Text variant="titleSmall" style={styles.saleTotal}>
-        {formatCurrency(item.total)}
+      <Text style={[styles.saleTotal, type.number]}>
+        +{formatCurrency(item.total)}
       </Text>
     </View>
   );
@@ -245,28 +250,26 @@ function SalesScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled">
-        <Text variant="headlineSmall" style={styles.title}>
-          Sales
-        </Text>
-        <Text variant="bodyMedium" style={styles.subtitle}>
-          Record sales locally and update inventory instantly.
-        </Text>
+        <ScreenHeader
+          eyebrow="Sales"
+          title="Record Sale"
+          subtitle="Record sales locally and update inventory instantly."
+        />
 
-        <Card style={styles.formCard}>
-          <Card.Content>
-            {products.length === 0 ? (
-              <View style={styles.emptyProductBox}>
-                <Text variant="titleSmall" style={styles.emptyTitle}>
-                  No products available
-                </Text>
-                <Text variant="bodySmall" style={styles.emptyText}>
-                  Add products in Inventory before recording sales.
-                </Text>
-              </View>
-            ) : (
-              <>
+        <SurfaceCard style={styles.formCard}>
+          {products.length === 0 ? (
+            <View style={styles.emptyProductBox}>
+              <Text style={styles.emptyTitle}>No products available</Text>
+              <Text style={styles.emptyText}>
+                Add products in Inventory before recording sales.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.inputWrap}>
+                <Search color={COLORS.muted} size={18} style={styles.inputIcon} />
                 <TextInput
-                  label="Search and select product"
+                  placeholder="Search and select product"
                   value={productSearch}
                   onChangeText={value => {
                     setProductSearch(value);
@@ -275,106 +278,90 @@ function SalesScreen() {
                     setErrors(current => ({...current, product: '', form: ''}));
                   }}
                   onFocus={() => setShowProductOptions(true)}
-                  mode="outlined"
                   style={styles.input}
-                  error={Boolean(errors.product)}
+                  placeholderTextColor={COLORS.muted}
                 />
-                <HelperText type="error" visible={Boolean(errors.product)}>
-                  {errors.product}
-                </HelperText>
+              </View>
+              {errors.product ? <Text style={styles.errorText}>{errors.product}</Text> : null}
 
-                {showProductOptions ? (
-                  <Card style={styles.dropdownCard}>
-                    {filteredProducts.length > 0 ? (
-                      <FlatList
-                        data={filteredProducts}
-                        keyExtractor={item => item.id}
-                        renderItem={renderProductOption}
-                        keyboardShouldPersistTaps="handled"
-                        nestedScrollEnabled
-                        style={styles.dropdownList}
-                      />
-                    ) : (
-                      <Text variant="bodyMedium" style={styles.dropdownEmpty}>
-                        No matching products found.
-                      </Text>
-                    )}
-                  </Card>
-                ) : null}
+              {showProductOptions ? (
+                <View style={styles.dropdownCard}>
+                  {filteredProducts.length > 0 ? (
+                    <FlatList
+                      data={filteredProducts}
+                      keyExtractor={item => item.id}
+                      renderItem={renderProductOption}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled
+                      style={styles.dropdownList}
+                    />
+                  ) : (
+                    <Text style={styles.dropdownEmpty}>No matching products found.</Text>
+                  )}
+                </View>
+              ) : null}
 
-                {selectedProduct ? (
-                  <View style={styles.selectedBox}>
-                    <Text variant="titleSmall" style={styles.selectedTitle}>
-                      {selectedProduct.name}
-                    </Text>
-                    <Text
-                      variant="bodySmall"
-                      style={styles.selectedDescription}>
-                      Available: {selectedProduct.quantity || 0} | Selling
-                      price: {formatCurrency(selectedProduct.selling_price)}
-                    </Text>
-                  </View>
-                ) : null}
-
-                <TextInput
-                  label="Quantity sold"
-                  value={quantity}
-                  onChangeText={updateQuantity}
-                  mode="outlined"
-                  keyboardType="number-pad"
-                  style={styles.input}
-                  error={Boolean(errors.quantity)}
-                />
-                <HelperText type="error" visible={Boolean(errors.quantity)}>
-                  {errors.quantity}
-                </HelperText>
-
-                <View style={styles.totalBox}>
-                  <Text variant="labelLarge" style={styles.totalLabel}>
-                    Calculated Total
-                  </Text>
-                  <Text variant="headlineSmall" style={styles.totalValue}>
-                    {formatCurrency(calculatedTotal)}
+              {selectedProduct ? (
+                <View style={styles.selectedBox}>
+                  <Text style={styles.selectedTitle}>{selectedProduct.name}</Text>
+                  <Text style={styles.selectedDescription}>
+                    Available {selectedProduct.quantity || 0} · Selling price{' '}
+                    {formatCurrency(selectedProduct.selling_price)}
                   </Text>
                 </View>
+              ) : null}
 
-                {stockWarning ? (
-                  <View style={styles.warningBox}>
-                    <Text variant="bodyMedium" style={styles.warningText}>
-                      {stockWarning}
-                    </Text>
-                  </View>
-                ) : null}
+              <View style={styles.quantityRow}>
+                <TouchableOpacity
+                  activeOpacity={0.84}
+                  onPress={() =>
+                    updateQuantity(String(Math.max(0, Number(quantity || 0) - 1)))
+                  }
+                  style={styles.quantityButton}>
+                  <Minus color={COLORS.primary} size={18} />
+                </TouchableOpacity>
+                <TextInput
+                  placeholder="Quantity"
+                  value={quantity}
+                  onChangeText={updateQuantity}
+                  keyboardType="number-pad"
+                  style={styles.quantityInput}
+                  placeholderTextColor={COLORS.muted}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.84}
+                  onPress={() => updateQuantity(String(Number(quantity || 0) + 1))}
+                  style={styles.quantityButton}>
+                  <Plus color={COLORS.primary} size={18} />
+                </TouchableOpacity>
+              </View>
+              {errors.quantity ? <Text style={styles.errorText}>{errors.quantity}</Text> : null}
 
-                {errors.form ? (
-                  <Text variant="bodySmall" style={styles.formError}>
-                    {errors.form}
-                  </Text>
-                ) : null}
+              <View style={styles.totalBox}>
+                <Text style={styles.totalLabel}>CALCULATED TOTAL</Text>
+                <Text style={[styles.totalValue, type.number]}>
+                  {formatCurrency(calculatedTotal)}
+                </Text>
+              </View>
 
-                <Button
-                  mode="contained"
-                  onPress={handleConfirmSale}
-                  loading={isSaving}
-                  disabled={isSaving || products.length === 0}
-                  style={styles.primaryButton}>
-                  Confirm Sale
-                </Button>
-              </>
-            )}
-          </Card.Content>
-        </Card>
+              {stockWarning ? <Text style={styles.warningText}>{stockWarning}</Text> : null}
+              {errors.form ? <Text style={styles.errorText}>{errors.form}</Text> : null}
 
-        <Card style={styles.listCard}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Today's Sales
-            </Text>
-            <Text variant="bodySmall" style={styles.sectionSubtitle}>
-              Sales recorded on this device today
-            </Text>
-          </Card.Content>
-          <Divider />
+              <KoboButton
+                onPress={handleConfirmSale}
+                loading={isSaving}
+                disabled={isSaving || products.length === 0}>
+                Confirm Sale
+              </KoboButton>
+            </>
+          )}
+        </SurfaceCard>
+
+        <SurfaceCard style={styles.listCard}>
+          <View style={styles.sectionHead}>
+            <Check color={COLORS.success} size={20} strokeWidth={2.4} />
+            <Text style={styles.sectionTitle}>Today's Sales</Text>
+          </View>
           {todaySales.length > 0 ? (
             <FlatList
               data={todaySales}
@@ -383,17 +370,11 @@ function SalesScreen() {
               scrollEnabled={false}
             />
           ) : (
-            <Text variant="bodyMedium" style={styles.emptySalesText}>
-              No sales recorded today.
-            </Text>
+            <Text style={styles.emptyText}>No sales recorded today.</Text>
           )}
-        </Card>
+        </SurfaceCard>
 
-        {isLoading ? (
-          <Text variant="bodySmall" style={styles.loadingText}>
-            Refreshing local data...
-          </Text>
-        ) : null}
+        {isLoading ? <Text style={styles.loadingText}>Refreshing local data...</Text> : null}
       </ScrollView>
 
       <Snackbar
@@ -408,43 +389,52 @@ function SalesScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: COLORS.background,
     flex: 1,
-    backgroundColor: '#f7f9fb',
   },
   content: {
-    padding: 16,
-    paddingBottom: 36,
-  },
-  title: {
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#64748b',
-    marginBottom: 16,
-    marginTop: 4,
+    alignSelf: 'center',
+    maxWidth: 448,
+    paddingBottom: 112,
+    paddingHorizontal: 20,
+    width: '100%',
   },
   formCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+    gap: 10,
+  },
+  inputWrap: {
+    justifyContent: 'center',
+  },
+  inputIcon: {
+    left: 16,
+    position: 'absolute',
+    zIndex: 1,
   },
   input: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    minHeight: 52,
+    paddingHorizontal: 16,
+    paddingLeft: 44,
   },
   dropdownCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#d8e0ea',
-    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 18,
     borderWidth: 1,
-    marginBottom: 12,
-    marginTop: -4,
+    overflow: 'hidden',
   },
   dropdownList: {
     maxHeight: 220,
   },
   optionRow: {
     alignItems: 'center',
-    borderBottomColor: '#eef2f7',
+    borderBottomColor: COLORS.line,
     borderBottomWidth: 1,
     flexDirection: 'row',
     minHeight: 64,
@@ -456,131 +446,158 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   optionTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
   },
   optionSubtitle: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
     marginTop: 2,
   },
-  optionChevron: {
-    color: '#94a3b8',
-    fontWeight: '700',
-  },
   dropdownEmpty: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
     padding: 14,
     textAlign: 'center',
   },
   selectedBox: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#a7f3d0',
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 12,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 18,
     padding: 12,
   },
   selectedTitle: {
-    color: '#047857',
-    fontWeight: '700',
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
   },
   selectedDescription: {
-    color: '#065f46',
+    color: COLORS.primaryDark,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
     marginTop: 2,
   },
-  totalBox: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
-    borderRadius: 8,
+  quantityRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quantityButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 16,
+    height: 50,
+    justifyContent: 'center',
+    width: 50,
+  },
+  quantityInput: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.line,
+    borderRadius: 18,
     borderWidth: 1,
-    marginBottom: 14,
-    padding: 14,
+    color: COLORS.text,
+    flex: 1,
+    fontFamily: FONT_FAMILY,
+    fontSize: 17,
+    fontWeight: '800',
+    minHeight: 52,
+    paddingHorizontal: 16,
+    textAlign: 'center',
+  },
+  totalBox: {
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 22,
+    padding: 16,
   },
   totalLabel: {
-    color: '#1d4ed8',
-    marginBottom: 4,
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
   },
   totalValue: {
-    color: '#0f172a',
-    fontWeight: '700',
+    color: COLORS.text,
+    fontSize: 30,
+    marginTop: 4,
   },
-  warningBox: {
-    backgroundColor: '#fff1f2',
-    borderColor: '#fda4af',
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 12,
-    padding: 12,
+  errorText: {
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
   },
   warningText: {
-    color: '#b42318',
-    fontWeight: '700',
-  },
-  formError: {
-    color: '#b42318',
-    marginBottom: 12,
-  },
-  primaryButton: {
-    borderRadius: 6,
+    backgroundColor: COLORS.warningSoft,
+    borderRadius: 14,
+    color: COLORS.warning,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    overflow: 'hidden',
+    padding: 10,
   },
   emptyProductBox: {
     alignItems: 'center',
     paddingVertical: 18,
   },
   emptyTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
   },
   emptyText: {
-    color: '#64748b',
-    marginTop: 4,
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    paddingVertical: 16,
     textAlign: 'center',
   },
   listCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
     marginTop: 16,
+    paddingBottom: 4,
+  },
+  sectionHead: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
   },
   sectionTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  sectionSubtitle: {
-    color: '#64748b',
-    marginTop: 2,
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 17,
+    fontWeight: '800',
   },
   saleRow: {
     alignItems: 'center',
-    borderBottomColor: '#eef2f7',
-    borderBottomWidth: 1,
+    borderTopColor: COLORS.line,
+    borderTopWidth: 1,
     flexDirection: 'row',
-    minHeight: 68,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    gap: 12,
+    minHeight: 70,
+    paddingVertical: 12,
   },
   saleDetails: {
     flex: 1,
-    paddingRight: 12,
   },
   saleTitle: {
-    color: '#0f172a',
-    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
   },
   saleDescription: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
     marginTop: 2,
   },
   saleTotal: {
-    color: '#047857',
-    fontWeight: '700',
-  },
-  emptySalesText: {
-    color: '#64748b',
-    padding: 16,
-    textAlign: 'center',
+    color: COLORS.success,
+    fontSize: 14,
   },
   loadingText: {
-    color: '#64748b',
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
     marginTop: 12,
     textAlign: 'center',
   },
