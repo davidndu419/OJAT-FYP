@@ -1,4 +1,13 @@
 {
   "name": "OfflineFinanceApp",
-  "displayName": "OfflineFinanceApp"
+  "displayName": "OfflineFinanceApp",
+  "expo": {
+    "name": "OJAT",
+    "slug": "ojat-app",
+    "version": "1.0.0",
+    "android": {
+      "package": "com.offlinefinanceapp",
+      "versionCode": 1
+    }
+  }
 }

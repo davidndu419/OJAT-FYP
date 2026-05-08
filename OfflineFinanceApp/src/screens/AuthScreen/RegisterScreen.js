@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -8,14 +9,30 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  GoogleSignin,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
+import {useDispatch} from 'react-redux';
+import {
   Button,
   HelperText,
   Snackbar,
   Text,
   TextInput,
 } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/FontAwesome';
+import {googleAuth, registerUser} from '../../services/apiService';
+import {loginSuccess} from '../../store/slices/authSlice';
+import {GOOGLE_WEB_CLIENT_ID, STORAGE_KEYS} from '../../utils/constants';
 
 const LOCAL_USERS_KEY = 'registered_users';
+
+GoogleSignin.configure({
+  ...(GOOGLE_WEB_CLIENT_ID ? {webClientId: GOOGLE_WEB_CLIENT_ID} : {}),
+  offlineAccess: false,
+});
+
+const GoogleButtonIcon = () => <Icon name="google" size={18} color="#ffffff" />;
 
 const initialForm = {
   fullName: '',
@@ -25,9 +42,11 @@ const initialForm = {
 };
 
 function RegisterScreen({navigation}) {
+  const dispatch = useDispatch();
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [successVisible, setSuccessVisible] = useState(false);
 
   const updateField = (field, value) => {
@@ -70,6 +89,15 @@ function RegisterScreen({navigation}) {
     return storedUsers ? JSON.parse(storedUsers) : [];
   };
 
+  const saveAuthSession = async (token, user) => {
+    await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+    await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    dispatch(loginSuccess({user, token}));
+  };
+
+  const getGoogleIdToken = googleResponse =>
+    googleResponse?.idToken || googleResponse?.data?.idToken;
+
   const handleRegister = async () => {
     if (!validateForm()) {
       return;
@@ -77,35 +105,126 @@ function RegisterScreen({navigation}) {
 
     setIsSaving(true);
     try {
-      const users = await getRegisteredUsers();
       const normalizedEmail = form.email.trim().toLowerCase();
-      const emailExists = users.some(user => user.email === normalizedEmail);
+      const response = await registerUser({
+        name: form.fullName.trim(),
+        email: normalizedEmail,
+        password: form.password,
+      });
 
-      if (emailExists) {
-        setErrors({email: 'An account already exists for this email.'});
+      if (![200, 201].includes(response.status)) {
+        const message =
+          response?.data?.message || 'Registration failed. Please try again.';
+        Alert.alert('Registration failed', message);
+        setErrors({form: message});
         return;
       }
 
-      const nextUsers = [
-        ...users,
-        {
-          fullName: form.fullName.trim(),
-          email: normalizedEmail,
-          password: form.password,
-        },
-      ];
+      const token = response?.data?.token;
+      const serverUser = response?.data?.user;
+
+      if (!token || !serverUser) {
+        const message =
+          'Registration succeeded but the server did not return login details.';
+        Alert.alert('Registration failed', message);
+        setErrors({form: message});
+        return;
+      }
+
+      const users = await getRegisteredUsers();
+      const emailExists = users.some(user => user.email === normalizedEmail);
+
+      const nextUsers = emailExists
+        ? users
+        : [
+            ...users,
+            {
+              fullName: form.fullName.trim(),
+              email: normalizedEmail,
+            },
+          ];
 
       await AsyncStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(nextUsers));
+
+      await saveAuthSession(token, serverUser);
       setSuccessVisible(true);
       setForm(initialForm);
-
-      setTimeout(() => {
-        navigation.replace('Login', {registeredEmail: normalizedEmail});
-      }, 700);
     } catch (error) {
-      setErrors({form: 'Registration failed. Please try again.'});
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Registration failed. Please try again.';
+
+      console.error('[RegisterScreen] Registration failed:', error);
+      Alert.alert('Registration failed', message);
+      setErrors({form: message});
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    setErrors(current => ({...current, form: ''}));
+
+    try {
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({
+          showPlayServicesUpdateDialog: true,
+        });
+      }
+
+      const googleResponse = await GoogleSignin.signIn();
+      const idToken = getGoogleIdToken(googleResponse);
+
+      if (!idToken) {
+        const message =
+          'Google did not return an idToken. Check GOOGLE_WEB_CLIENT_ID.';
+        Alert.alert('Google sign-in failed', message);
+        setErrors({form: message});
+        return;
+      }
+
+      const response = await googleAuth(idToken);
+
+      if (![200, 201].includes(response.status)) {
+        const message =
+          response?.data?.message || 'Google sign-in failed. Please try again.';
+        Alert.alert('Google sign-in failed', message);
+        setErrors({form: message});
+        return;
+      }
+
+      const token = response?.data?.token;
+      const user = response?.data?.user;
+
+      if (!token || !user) {
+        const message =
+          'Google sign-in succeeded but the server did not return login details.';
+        Alert.alert('Google sign-in failed', message);
+        setErrors({form: message});
+        return;
+      }
+
+      await saveAuthSession(token, user);
+      setSuccessVisible(true);
+    } catch (error) {
+      if (error?.code === statusCodes.SIGN_IN_CANCELLED) {
+        return;
+      }
+
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Google sign-in failed. Please try again.';
+
+      console.error('[RegisterScreen] Google sign-in failed:', error);
+      Alert.alert('Google sign-in failed', message);
+      setErrors({form: message});
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -185,9 +304,21 @@ function RegisterScreen({navigation}) {
           mode="contained"
           onPress={handleRegister}
           loading={isSaving}
-          disabled={isSaving}
+          disabled={isSaving || isGoogleLoading}
           style={styles.primaryButton}>
           Register
+        </Button>
+
+        <Button
+          mode="contained"
+          icon={GoogleButtonIcon}
+          onPress={handleGoogleSignIn}
+          loading={isGoogleLoading}
+          disabled={isSaving || isGoogleLoading}
+          style={styles.googleButton}
+          labelStyle={styles.googleButtonLabel}
+          contentStyle={styles.googleButtonContent}>
+          Sign in with Google
         </Button>
 
         <View style={styles.footer}>
@@ -202,7 +333,7 @@ function RegisterScreen({navigation}) {
         visible={successVisible}
         onDismiss={() => setSuccessVisible(false)}
         duration={700}>
-        Registration successful. Opening login...
+        Registration successful.
       </Snackbar>
     </KeyboardAvoidingView>
   );
@@ -237,6 +368,25 @@ const styles = StyleSheet.create({
   primaryButton: {
     marginTop: 8,
     borderRadius: 6,
+  },
+  googleButton: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.58)',
+    backgroundColor: 'rgba(25, 118, 210, 0.42)',
+    shadowColor: '#38bdf8',
+    shadowOffset: {width: 0, height: 10},
+    shadowOpacity: 0.32,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  googleButtonContent: {
+    height: 48,
+  },
+  googleButtonLabel: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
   footer: {
     alignItems: 'center',

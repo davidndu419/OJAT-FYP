@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -7,17 +8,27 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  GoogleSignin,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 import {useDispatch} from 'react-redux';
 import {Button, HelperText, Text, TextInput} from 'react-native-paper';
+import Icon from 'react-native-vector-icons/FontAwesome';
 import {
   loginFailure,
   loginStart,
   loginSuccess,
 } from '../../store/slices/authSlice';
-import {generateId} from '../../utils/helpers';
-import {STORAGE_KEYS} from '../../utils/constants';
+import {GOOGLE_WEB_CLIENT_ID, STORAGE_KEYS} from '../../utils/constants';
+import {googleAuth, loginUser} from '../../services/apiService';
 
-const LOCAL_USERS_KEY = 'registered_users';
+GoogleSignin.configure({
+  ...(GOOGLE_WEB_CLIENT_ID ? {webClientId: GOOGLE_WEB_CLIENT_ID} : {}),
+  offlineAccess: false,
+});
+
+const GoogleButtonIcon = () => <Icon name="google" size={18} color="#ffffff" />;
 
 function LoginScreen({navigation, route}) {
   const dispatch = useDispatch();
@@ -25,6 +36,7 @@ function LoginScreen({navigation, route}) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   useEffect(() => {
     if (route.params?.registeredEmail) {
@@ -50,11 +62,6 @@ function LoginScreen({navigation, route}) {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const getRegisteredUsers = async () => {
-    const storedUsers = await AsyncStorage.getItem(LOCAL_USERS_KEY);
-    return storedUsers ? JSON.parse(storedUsers) : [];
-  };
-
   const handleLogin = async () => {
     if (!validateForm()) {
       return;
@@ -64,36 +71,127 @@ function LoginScreen({navigation, route}) {
     dispatch(loginStart());
 
     try {
-      const users = await getRegisteredUsers();
       const normalizedEmail = email.trim().toLowerCase();
-      const user = users.find(
-        account =>
-          account.email === normalizedEmail && account.password === password,
-      );
+      const response = await loginUser({
+        email: normalizedEmail,
+        password,
+      });
 
-      if (!user) {
-        const message = 'Invalid email or password.';
+      if (![200, 201].includes(response.status)) {
+        const message = response?.data?.message || 'Invalid email or password.';
         setErrors({form: message});
         dispatch(loginFailure(message));
+        Alert.alert('Login failed', message);
         return;
       }
 
-      const token = `offline-token-${generateId()}`;
-      const safeUser = {
-        fullName: user.fullName,
-        email: user.email,
-      };
+      const token = response?.data?.token;
+      const safeUser = response?.data?.user;
+
+      if (!token || !safeUser) {
+        const message =
+          'Login succeeded but the server did not return login details.';
+        setErrors({form: message});
+        dispatch(loginFailure(message));
+        Alert.alert('Login failed', message);
+        return;
+      }
 
       await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(safeUser));
 
       dispatch(loginSuccess({user: safeUser, token}));
     } catch (error) {
-      const message = 'Login failed. Please try again.';
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Login failed. Please try again.';
+
+      console.error('[LoginScreen] Login failed:', error);
       setErrors({form: message});
       dispatch(loginFailure(message));
+      Alert.alert('Login failed', message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const saveAuthSession = async (token, user) => {
+    await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+    await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    dispatch(loginSuccess({user, token}));
+  };
+
+  const getGoogleIdToken = googleResponse =>
+    googleResponse?.idToken || googleResponse?.data?.idToken;
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    dispatch(loginStart());
+    setErrors(current => ({...current, form: ''}));
+
+    try {
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({
+          showPlayServicesUpdateDialog: true,
+        });
+      }
+
+      const googleResponse = await GoogleSignin.signIn();
+      const idToken = getGoogleIdToken(googleResponse);
+
+      if (!idToken) {
+        const message =
+          'Google did not return an idToken. Check GOOGLE_WEB_CLIENT_ID.';
+        setErrors({form: message});
+        dispatch(loginFailure(message));
+        Alert.alert('Google sign-in failed', message);
+        return;
+      }
+
+      const response = await googleAuth(idToken);
+
+      if (![200, 201].includes(response.status)) {
+        const message =
+          response?.data?.message || 'Google sign-in failed. Please try again.';
+        setErrors({form: message});
+        dispatch(loginFailure(message));
+        Alert.alert('Google sign-in failed', message);
+        return;
+      }
+
+      const token = response?.data?.token;
+      const user = response?.data?.user;
+
+      if (!token || !user) {
+        const message =
+          'Google sign-in succeeded but the server did not return login details.';
+        setErrors({form: message});
+        dispatch(loginFailure(message));
+        Alert.alert('Google sign-in failed', message);
+        return;
+      }
+
+      await saveAuthSession(token, user);
+    } catch (error) {
+      if (error?.code === statusCodes.SIGN_IN_CANCELLED) {
+        dispatch(loginFailure(null));
+        return;
+      }
+
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Google sign-in failed. Please try again.';
+
+      console.error('[LoginScreen] Google sign-in failed:', error);
+      setErrors({form: message});
+      dispatch(loginFailure(message));
+      Alert.alert('Google sign-in failed', message);
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -154,9 +252,21 @@ function LoginScreen({navigation, route}) {
           mode="contained"
           onPress={handleLogin}
           loading={isLoading}
-          disabled={isLoading}
+          disabled={isLoading || isGoogleLoading}
           style={styles.primaryButton}>
           Login
+        </Button>
+
+        <Button
+          mode="contained"
+          icon={GoogleButtonIcon}
+          onPress={handleGoogleSignIn}
+          loading={isGoogleLoading}
+          disabled={isLoading || isGoogleLoading}
+          style={styles.googleButton}
+          labelStyle={styles.googleButtonLabel}
+          contentStyle={styles.googleButtonContent}>
+          Sign in with Google
         </Button>
 
         <View style={styles.footer}>
@@ -199,6 +309,25 @@ const styles = StyleSheet.create({
   primaryButton: {
     marginTop: 8,
     borderRadius: 6,
+  },
+  googleButton: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.58)',
+    backgroundColor: 'rgba(25, 118, 210, 0.42)',
+    shadowColor: '#38bdf8',
+    shadowOffset: {width: 0, height: 10},
+    shadowOpacity: 0.32,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  googleButtonContent: {
+    height: 48,
+  },
+  googleButtonLabel: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
   footer: {
     alignItems: 'center',

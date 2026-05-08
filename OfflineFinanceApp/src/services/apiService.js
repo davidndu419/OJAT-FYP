@@ -23,17 +23,47 @@ apiClient.interceptors.request.use(
   error => Promise.reject(error),
 );
 
-export const postProduct = data => apiClient.post('/products', data);
+apiClient.interceptors.response.use(
+  response => response,
+  error => {
+    const status = error?.response?.status;
+    const method = error?.config?.method?.toUpperCase();
+    const url = error?.config?.url;
+    const responseData = error?.response?.data;
 
-export const getProducts = () => apiClient.get('/products');
+    console.error('[API] Axios error response:', {
+      status,
+      method,
+      url,
+      data: responseData,
+      message: error.message,
+    });
 
-export const postSale = data => apiClient.post('/sales', data);
+    if (status === 401) {
+      console.error('Token is invalid or expired');
+    }
 
-export const getSales = () => apiClient.get('/sales');
+    return Promise.reject(error);
+  },
+);
 
-export const postExpense = data => apiClient.post('/expenses', data);
+export const registerUser = data => apiClient.post('/auth/register', data);
 
-export const getExpenses = () => apiClient.get('/expenses');
+export const loginUser = data => apiClient.post('/auth/login', data);
+
+export const googleAuth = idToken => apiClient.post('/auth/google', {idToken});
+
+export const postProduct = data => apiClient.post('/api/products', data);
+
+export const getProducts = () => apiClient.get('/api/products');
+
+export const postSale = data => apiClient.post('/api/sales', data);
+
+export const getSales = () => apiClient.get('/api/sales');
+
+export const postExpense = data => apiClient.post('/api/expenses', data);
+
+export const getExpenses = () => apiClient.get('/api/expenses');
 
 export const apiService = {
   get: (url, config = {}) => apiClient.get(url, config),
