@@ -5,22 +5,30 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {
-  Check,
-  ChevronRight,
-  Minus,
-  Plus,
-  Search,
-  ShoppingBag,
-} from 'lucide-react-native';
-import {Snackbar, Text} from 'react-native-paper';
+  ActivityIndicator,
+  Button,
+  Card,
+  Chip,
+  Menu,
+  Modal,
+  Portal,
+  SegmentedButtons,
+  Snackbar,
+  Text,
+  TextInput,
+} from 'react-native-paper';
 import {format, formatISO, parseISO} from 'date-fns';
-import {getDBConnection} from '../database/db';
+import {
+  getDBConnection,
+  getSetting,
+  getTodayBalance,
+  resetBalanceIfNewDay,
+  updateDailyBalance,
+} from '../database/db';
 import {
   formatCurrency,
   generateId,
@@ -28,13 +36,6 @@ import {
   getRowsArray,
 } from '../utils/helpers';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
-import {
-  IconBubble,
-  KoboButton,
-  ScreenHeader,
-  SurfaceCard,
-  type,
-} from '../components/KoboUI';
 
 const getTodayRange = () => {
   const now = new Date();
@@ -48,47 +49,110 @@ const getTodayRange = () => {
   return {startOfToday, endOfToday};
 };
 
+const initialBalance = {
+  sales_cash: 0,
+  sales_bank: 0,
+  services_cash: 0,
+  services_bank: 0,
+};
+
+const preferenceToView = preference => {
+  if (preference === 'combined') {
+    return 'both';
+  }
+
+  if (preference === 'services_only') {
+    return 'services';
+  }
+
+  return 'sales';
+};
+
+const ListGap = () => <View style={styles.listGap} />;
+
 function SalesScreen() {
   const [products, setProducts] = useState([]);
-  const [todaySales, setTodaySales] = useState([]);
+  const [serviceTypes, setServiceTypes] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [balance, setBalance] = useState(initialBalance);
+  const [balanceView, setBalanceView] = useState('sales');
+  const [transactionView, setTransactionView] = useState('both');
+  const [saleModalVisible, setSaleModalVisible] = useState(false);
+  const [serviceModalVisible, setServiceModalVisible] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantity, setQuantity] = useState('');
+  const [salePaymentMethod, setSalePaymentMethod] = useState('cash');
+  const [serviceAmount, setServiceAmount] = useState('');
+  const [servicePaymentMethod, setServicePaymentMethod] = useState('cash');
+  const [selectedServiceType, setSelectedServiceType] = useState(null);
+  const [serviceNotes, setServiceNotes] = useState('');
+  const [serviceTypeMenuVisible, setServiceTypeMenuVisible] = useState(false);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [stockWarning, setStockWarning] = useState('');
-  const [showProductOptions, setShowProductOptions] = useState(false);
+  const [message, setMessage] = useState('');
 
   const loadSalesData = useCallback(async () => {
     setIsLoading(true);
     try {
+      await resetBalanceIfNewDay();
       const db = await getDBConnection();
       const {startOfToday, endOfToday} = getTodayRange();
 
-      const [productsResult] = await db.executeSql(
-        'SELECT * FROM products ORDER BY name ASC;',
-      );
-      const [salesResult] = await db.executeSql(
-        `SELECT sales.id,
-                sales.quantity,
-                sales.total,
-                sales.date,
-                products.name AS product_name
-         FROM sales
-         LEFT JOIN products ON products.id = sales.product_id
-         WHERE sales.date BETWEEN ? AND ?
-         ORDER BY sales.date DESC;`,
-        [startOfToday, endOfToday],
-      );
+      const [productsResult, serviceTypesResult, salesResult, servicesResult] =
+        await Promise.all([
+          db.executeSql('SELECT * FROM products ORDER BY name ASC;'),
+          db.executeSql('SELECT * FROM service_types ORDER BY name ASC;'),
+          db.executeSql(
+            `SELECT sales.id,
+                  sales.quantity,
+                  sales.total AS amount,
+                  sales.date,
+                  COALESCE(sales.payment_method, 'cash') AS payment_method,
+                  products.name AS title,
+                  'sale' AS kind
+           FROM sales
+           LEFT JOIN products ON products.id = sales.product_id
+           WHERE sales.date BETWEEN ? AND ?
+           ORDER BY sales.date DESC;`,
+            [startOfToday, endOfToday],
+          ),
+          db.executeSql(
+            `SELECT id,
+                  service_type AS title,
+                  amount,
+                  payment_method,
+                  date,
+                  notes,
+                  'service' AS kind
+           FROM services
+           WHERE date BETWEEN ? AND ?
+           ORDER BY date DESC;`,
+            [startOfToday, endOfToday],
+          ),
+        ]);
 
-      setProducts(getRowsArray(productsResult));
-      setTodaySales(getRowsArray(salesResult));
+      const todayBalance = await getTodayBalance();
+      const displayPreference = await getSetting('balance_display');
+      const salesRows = getRowsArray(salesResult[0]);
+      const serviceRows = getRowsArray(servicesResult[0]);
+
+      setProducts(getRowsArray(productsResult[0]));
+      setServiceTypes(getRowsArray(serviceTypesResult[0]));
+      setBalance(todayBalance || initialBalance);
+      setBalanceView(preferenceToView(displayPreference));
+      setTransactions(
+        [...salesRows, ...serviceRows].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+        ),
+      );
+      setErrors({});
     } catch (error) {
       setProducts([]);
-      setTodaySales([]);
-      setErrors({form: 'Unable to load local sales data.'});
+      setServiceTypes([]);
+      setTransactions([]);
+      setErrors({form: 'Unable to load local sales and service data.'});
     } finally {
       setIsLoading(false);
     }
@@ -114,29 +178,45 @@ function SalesScreen() {
     );
   }, [productSearch, products]);
 
-  const soldQuantity = Number(quantity || 0);
-  const selectedSellingPrice = Number(selectedProduct?.selling_price || 0);
-  const calculatedTotal =
+  const filteredTransactions = useMemo(() => {
+    if (transactionView === 'sales') {
+      return transactions.filter(item => item.kind === 'sale');
+    }
+
+    if (transactionView === 'services') {
+      return transactions.filter(item => item.kind === 'service');
+    }
+
+    return transactions;
+  }, [transactionView, transactions]);
+
+  const saleTotal =
     selectedProduct && quantity.trim()
-      ? soldQuantity * selectedSellingPrice
+      ? Number(quantity || 0) * Number(selectedProduct.selling_price || 0)
       : 0;
 
-  const updateQuantity = value => {
-    setQuantity(value);
-    setErrors(current => ({...current, quantity: '', form: ''}));
-    setStockWarning('');
+  const closeSaleModal = () => {
+    setSaleModalVisible(false);
+    setProductSearch('');
+    setSelectedProduct(null);
+    setQuantity('');
+    setSalePaymentMethod('cash');
+    setErrors({});
   };
 
-  const selectProduct = product => {
-    setSelectedProduct(product);
-    setProductSearch(product.name);
-    setShowProductOptions(false);
-    setErrors(current => ({...current, product: '', form: ''}));
-    setStockWarning('');
+  const closeServiceModal = () => {
+    setServiceModalVisible(false);
+    setServiceAmount('');
+    setServicePaymentMethod('cash');
+    setSelectedServiceType(null);
+    setServiceNotes('');
+    setServiceTypeMenuVisible(false);
+    setErrors({});
   };
 
   const validateSale = () => {
     const nextErrors = {};
+    const soldQuantity = Number(quantity || 0);
     const availableQuantity = Number(selectedProduct?.quantity || 0);
 
     if (!selectedProduct) {
@@ -146,9 +226,31 @@ function SalesScreen() {
     if (!quantity.trim()) {
       nextErrors.quantity = 'Quantity sold is required.';
     } else if (!/^\d+$/.test(quantity.trim()) || soldQuantity <= 0) {
-      nextErrors.quantity = 'Quantity must be a whole number greater than zero.';
+      nextErrors.quantity =
+        'Quantity must be a whole number greater than zero.';
     } else if (selectedProduct && soldQuantity > availableQuantity) {
       nextErrors.quantity = `Only ${availableQuantity} item(s) available.`;
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const validateService = () => {
+    const nextErrors = {};
+
+    if (!serviceAmount.trim()) {
+      nextErrors.serviceAmount = 'Amount is required.';
+    } else if (
+      !/^\d+(\.\d+)?$/.test(serviceAmount.trim()) ||
+      Number(serviceAmount) <= 0
+    ) {
+      nextErrors.serviceAmount =
+        'Amount must be a valid number greater than zero.';
+    }
+
+    if (!selectedServiceType) {
+      nextErrors.serviceType = 'Select a service type.';
     }
 
     setErrors(nextErrors);
@@ -163,7 +265,7 @@ function SalesScreen() {
     setIsSaving(true);
     try {
       const db = await getDBConnection();
-      const saleId = generateId();
+      const soldQuantity = Number(quantity || 0);
       const saleDate = getCurrentTimestamp();
       const remainingQuantity =
         Number(selectedProduct.quantity || 0) - soldQuantity;
@@ -173,9 +275,24 @@ function SalesScreen() {
         db.transaction(
           tx => {
             tx.executeSql(
-              `INSERT INTO sales (id, product_id, quantity, total, date, synced)
-               VALUES (?, ?, ?, ?, ?, ?);`,
-              [saleId, selectedProduct.id, soldQuantity, total, saleDate, 0],
+              `INSERT INTO sales (
+                 id,
+                 product_id,
+                 quantity,
+                 total,
+                 payment_method,
+                 date,
+                 synced
+               ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+              [
+                generateId(),
+                selectedProduct.id,
+                soldQuantity,
+                total,
+                salePaymentMethod,
+                saleDate,
+                0,
+              ],
             );
             tx.executeSql(
               `UPDATE products
@@ -191,18 +308,9 @@ function SalesScreen() {
         );
       });
 
-      if (remainingQuantity < Number(selectedProduct.min_threshold || 0)) {
-        setStockWarning(
-          `${selectedProduct.name} is below minimum stock. Remaining quantity: ${remainingQuantity}.`,
-        );
-      } else {
-        setStockWarning('');
-      }
-
-      setSuccessMessage('Sale recorded successfully.');
-      setQuantity('');
-      setSelectedProduct(null);
-      setProductSearch('');
+      await updateDailyBalance('sales', salePaymentMethod, total);
+      setMessage('Sale recorded successfully.');
+      closeSaleModal();
       await loadSalesData();
     } catch (error) {
       setErrors({form: 'Unable to record sale. Please try again.'});
@@ -211,37 +319,139 @@ function SalesScreen() {
     }
   };
 
-  const renderProductOption = ({item}) => (
-    <TouchableOpacity
-      activeOpacity={0.82}
-      onPress={() => selectProduct(item)}
-      style={styles.optionRow}>
-      <View style={styles.optionText}>
-        <Text style={styles.optionTitle}>{item.name}</Text>
-        <Text style={styles.optionSubtitle}>
-          Qty {item.quantity || 0} · {formatCurrency(item.selling_price)}
-        </Text>
-      </View>
-      <ChevronRight color={COLORS.primary} size={18} />
-    </TouchableOpacity>
+  const handleSaveService = async () => {
+    if (!validateService()) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const amount = Number(serviceAmount);
+      const serviceDate = getCurrentTimestamp();
+      const db = await getDBConnection();
+
+      await db.executeSql(
+        `INSERT INTO services (
+           id,
+           service_type,
+           amount,
+           payment_method,
+           date,
+           notes,
+           synced
+         ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        [
+          generateId(),
+          selectedServiceType.name,
+          amount,
+          servicePaymentMethod,
+          serviceDate,
+          serviceNotes.trim(),
+          0,
+        ],
+      );
+
+      await updateDailyBalance('services', servicePaymentMethod, amount);
+      setMessage('Service recorded successfully.');
+      closeServiceModal();
+      await loadSalesData();
+    } catch (error) {
+      setErrors({form: 'Unable to save service. Please try again.'});
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const balanceRows = useMemo(() => {
+    if (balanceView === 'sales') {
+      return [
+        {label: 'Sales Cash', value: balance.sales_cash},
+        {label: 'Sales Bank', value: balance.sales_bank},
+      ];
+    }
+
+    if (balanceView === 'services') {
+      return [
+        {label: 'Services Cash', value: balance.services_cash},
+        {label: 'Services Bank', value: balance.services_bank},
+      ];
+    }
+
+    return [
+      {
+        label: 'Total Cash',
+        value:
+          Number(balance.sales_cash || 0) + Number(balance.services_cash || 0),
+      },
+      {
+        label: 'Total Bank',
+        value:
+          Number(balance.sales_bank || 0) + Number(balance.services_bank || 0),
+      },
+    ];
+  }, [balance, balanceView]);
+
+  const renderProduct = ({item}) => (
+    <Card
+      mode="outlined"
+      style={[
+        styles.optionCard,
+        selectedProduct?.id === item.id && styles.selectedOptionCard,
+      ]}
+      onPress={() => {
+        setSelectedProduct(item);
+        setProductSearch(item.name);
+        setErrors(current => ({...current, product: '', form: ''}));
+      }}>
+      <Card.Content style={styles.optionContent}>
+        <View style={styles.optionText}>
+          <Text style={styles.optionTitle}>{item.name}</Text>
+          <Text style={styles.optionSubtitle}>
+            Qty {item.quantity || 0} | {formatCurrency(item.selling_price)}
+          </Text>
+        </View>
+        <Chip compact selected={selectedProduct?.id === item.id}>
+          Select
+        </Chip>
+      </Card.Content>
+    </Card>
   );
 
-  const renderSale = ({item}) => (
-    <View style={styles.saleRow}>
-      <IconBubble tone="success" size={42}>
-        <ShoppingBag color={COLORS.success} size={19} strokeWidth={2.4} />
-      </IconBubble>
-      <View style={styles.saleDetails}>
-        <Text style={styles.saleTitle}>{item.product_name || 'Deleted product'}</Text>
-        <Text style={styles.saleDescription}>
-          Qty {item.quantity} · {format(parseISO(item.date), 'p')}
-        </Text>
-      </View>
-      <Text style={[styles.saleTotal, type.number]}>
-        +{formatCurrency(item.total)}
-      </Text>
-    </View>
-  );
+  const renderTransaction = ({item}) => {
+    const isSale = item.kind === 'sale';
+    const tag = item.payment_method === 'bank' ? 'Bank' : 'Cash';
+
+    return (
+      <Card
+        mode="outlined"
+        style={[
+          styles.transactionCard,
+          isSale ? styles.saleBorder : styles.serviceBorder,
+        ]}>
+        <Card.Content>
+          <View style={styles.transactionTop}>
+            <View style={styles.transactionText}>
+              <Text style={styles.transactionTitle}>
+                {item.title || (isSale ? 'Deleted product' : 'Service')}
+              </Text>
+              <Text style={styles.transactionMeta}>
+                {isSale ? `Qty ${item.quantity}` : 'Service'} |{' '}
+                {format(parseISO(item.date), 'p')}
+              </Text>
+            </View>
+            <View style={styles.transactionAmountWrap}>
+              <Text style={styles.transactionAmount}>
+                {formatCurrency(item.amount)}
+              </Text>
+              <Chip compact style={styles.paymentChip}>
+                {tag}
+              </Chip>
+            </View>
+          </View>
+        </Card.Content>
+      </Card>
+    );
+  };
 
   return (
     <KeyboardAvoidingView
@@ -250,138 +460,297 @@ function SalesScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled">
-        <ScreenHeader
-          eyebrow="Sales"
-          title="Record Sale"
-          subtitle="Record sales locally and update inventory instantly."
-        />
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>Sales</Text>
+          <Text style={styles.title}>Sales and Services</Text>
+          <Text style={styles.subtitle}>
+            Record product sales, service income, and today's offline balance.
+          </Text>
+        </View>
 
-        <SurfaceCard style={styles.formCard}>
-          {products.length === 0 ? (
-            <View style={styles.emptyProductBox}>
-              <Text style={styles.emptyTitle}>No products available</Text>
+        <Card mode="contained" style={styles.balanceCard}>
+          <Card.Content>
+            <Text style={styles.cardTitle}>Today's Balance</Text>
+            <SegmentedButtons
+              value={balanceView}
+              onValueChange={setBalanceView}
+              buttons={[
+                {value: 'sales', label: 'Sales'},
+                {value: 'services', label: 'Services'},
+                {value: 'both', label: 'Both'},
+              ]}
+              style={styles.segmented}
+            />
+            <View style={styles.balanceGrid}>
+              {balanceRows.map(item => (
+                <View key={item.label} style={styles.balanceTile}>
+                  <Text style={styles.balanceLabel}>{item.label}</Text>
+                  <Text style={styles.balanceValue}>
+                    {formatCurrency(item.value)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Card.Content>
+        </Card>
+
+        <View style={styles.actionRow}>
+          <Button
+            mode="contained"
+            buttonColor={COLORS.accent}
+            style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
+            onPress={() => setSaleModalVisible(true)}>
+            Sale
+          </Button>
+          <Button
+            mode="contained"
+            buttonColor={COLORS.success}
+            style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
+            onPress={() => setServiceModalVisible(true)}>
+            Service
+          </Button>
+        </View>
+
+        <Card mode="outlined" style={styles.listCard}>
+          <Card.Content>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.cardTitle}>Today's Transactions</Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : null}
+            </View>
+            <SegmentedButtons
+              value={transactionView}
+              onValueChange={setTransactionView}
+              buttons={[
+                {value: 'sales', label: 'Sales'},
+                {value: 'services', label: 'Services'},
+                {value: 'both', label: 'Both'},
+              ]}
+              style={styles.segmented}
+            />
+            {filteredTransactions.length > 0 ? (
+              <FlatList
+                data={filteredTransactions}
+                keyExtractor={item => `${item.kind}-${item.id}`}
+                renderItem={renderTransaction}
+                scrollEnabled={false}
+                ItemSeparatorComponent={ListGap}
+              />
+            ) : (
+              <Text style={styles.emptyText}>
+                No transactions recorded for this view today.
+              </Text>
+            )}
+            {errors.form ? (
+              <Text style={styles.errorText}>{errors.form}</Text>
+            ) : null}
+          </Card.Content>
+        </Card>
+      </ScrollView>
+
+      <Portal>
+        <Modal
+          visible={saleModalVisible}
+          onDismiss={closeSaleModal}
+          contentContainerStyle={styles.modalCard}>
+          <ScrollView keyboardShouldPersistTaps="handled">
+            <Text style={styles.modalTitle}>Record Product Sale</Text>
+            {products.length === 0 ? (
               <Text style={styles.emptyText}>
                 Add products in Inventory before recording sales.
               </Text>
-            </View>
-          ) : (
-            <>
-              <View style={styles.inputWrap}>
-                <Search color={COLORS.muted} size={18} style={styles.inputIcon} />
+            ) : (
+              <>
                 <TextInput
-                  placeholder="Search and select product"
+                  mode="outlined"
+                  label="Search product"
                   value={productSearch}
                   onChangeText={value => {
                     setProductSearch(value);
                     setSelectedProduct(null);
-                    setShowProductOptions(true);
                     setErrors(current => ({...current, product: '', form: ''}));
                   }}
-                  onFocus={() => setShowProductOptions(true)}
                   style={styles.input}
-                  placeholderTextColor={COLORS.muted}
                 />
-              </View>
-              {errors.product ? <Text style={styles.errorText}>{errors.product}</Text> : null}
-
-              {showProductOptions ? (
-                <View style={styles.dropdownCard}>
-                  {filteredProducts.length > 0 ? (
-                    <FlatList
-                      data={filteredProducts}
-                      keyExtractor={item => item.id}
-                      renderItem={renderProductOption}
-                      keyboardShouldPersistTaps="handled"
-                      nestedScrollEnabled
-                      style={styles.dropdownList}
-                    />
-                  ) : (
-                    <Text style={styles.dropdownEmpty}>No matching products found.</Text>
-                  )}
-                </View>
-              ) : null}
-
-              {selectedProduct ? (
-                <View style={styles.selectedBox}>
-                  <Text style={styles.selectedTitle}>{selectedProduct.name}</Text>
-                  <Text style={styles.selectedDescription}>
-                    Available {selectedProduct.quantity || 0} · Selling price{' '}
-                    {formatCurrency(selectedProduct.selling_price)}
-                  </Text>
-                </View>
-              ) : null}
-
-              <View style={styles.quantityRow}>
-                <TouchableOpacity
-                  activeOpacity={0.84}
-                  onPress={() =>
-                    updateQuantity(String(Math.max(0, Number(quantity || 0) - 1)))
+                {errors.product ? (
+                  <Text style={styles.errorText}>{errors.product}</Text>
+                ) : null}
+                <FlatList
+                  data={filteredProducts}
+                  keyExtractor={item => item.id}
+                  renderItem={renderProduct}
+                  scrollEnabled={false}
+                  ListEmptyComponent={
+                    <Text style={styles.emptyText}>
+                      No matching products found.
+                    </Text>
                   }
-                  style={styles.quantityButton}>
-                  <Minus color={COLORS.primary} size={18} />
-                </TouchableOpacity>
-                <TextInput
-                  placeholder="Quantity"
-                  value={quantity}
-                  onChangeText={updateQuantity}
-                  keyboardType="number-pad"
-                  style={styles.quantityInput}
-                  placeholderTextColor={COLORS.muted}
                 />
-                <TouchableOpacity
-                  activeOpacity={0.84}
-                  onPress={() => updateQuantity(String(Number(quantity || 0) + 1))}
-                  style={styles.quantityButton}>
-                  <Plus color={COLORS.primary} size={18} />
-                </TouchableOpacity>
-              </View>
-              {errors.quantity ? <Text style={styles.errorText}>{errors.quantity}</Text> : null}
+                <TextInput
+                  mode="outlined"
+                  label="Quantity"
+                  value={quantity}
+                  onChangeText={value => {
+                    setQuantity(value);
+                    setErrors(current => ({
+                      ...current,
+                      quantity: '',
+                      form: '',
+                    }));
+                  }}
+                  keyboardType="number-pad"
+                  style={styles.input}
+                />
+                {errors.quantity ? (
+                  <Text style={styles.errorText}>{errors.quantity}</Text>
+                ) : null}
+                <Text style={styles.fieldLabel}>Payment Method</Text>
+                <SegmentedButtons
+                  value={salePaymentMethod}
+                  onValueChange={setSalePaymentMethod}
+                  buttons={[
+                    {value: 'cash', label: 'Cash'},
+                    {value: 'bank', label: 'Bank Transfer'},
+                  ]}
+                  style={styles.segmented}
+                />
+                <Card mode="contained" style={styles.totalCard}>
+                  <Card.Content>
+                    <Text style={styles.balanceLabel}>Calculated Total</Text>
+                    <Text style={styles.totalValue}>
+                      {formatCurrency(saleTotal)}
+                    </Text>
+                  </Card.Content>
+                </Card>
+                {errors.form ? (
+                  <Text style={styles.errorText}>{errors.form}</Text>
+                ) : null}
+                <View style={styles.modalActions}>
+                  <Button mode="outlined" onPress={closeSaleModal}>
+                    Cancel
+                  </Button>
+                  <Button
+                    mode="contained"
+                    loading={isSaving}
+                    disabled={isSaving}
+                    onPress={handleConfirmSale}>
+                    Confirm Sale
+                  </Button>
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </Modal>
 
-              <View style={styles.totalBox}>
-                <Text style={styles.totalLabel}>CALCULATED TOTAL</Text>
-                <Text style={[styles.totalValue, type.number]}>
-                  {formatCurrency(calculatedTotal)}
-                </Text>
-              </View>
-
-              {stockWarning ? <Text style={styles.warningText}>{stockWarning}</Text> : null}
-              {errors.form ? <Text style={styles.errorText}>{errors.form}</Text> : null}
-
-              <KoboButton
-                onPress={handleConfirmSale}
-                loading={isSaving}
-                disabled={isSaving || products.length === 0}>
-                Confirm Sale
-              </KoboButton>
-            </>
-          )}
-        </SurfaceCard>
-
-        <SurfaceCard style={styles.listCard}>
-          <View style={styles.sectionHead}>
-            <Check color={COLORS.success} size={20} strokeWidth={2.4} />
-            <Text style={styles.sectionTitle}>Today's Sales</Text>
-          </View>
-          {todaySales.length > 0 ? (
-            <FlatList
-              data={todaySales}
-              keyExtractor={item => item.id}
-              renderItem={renderSale}
-              scrollEnabled={false}
+        <Modal
+          visible={serviceModalVisible}
+          onDismiss={closeServiceModal}
+          contentContainerStyle={styles.modalCard}>
+          <ScrollView keyboardShouldPersistTaps="handled">
+            <Text style={styles.modalTitle}>Record Service</Text>
+            <TextInput
+              mode="outlined"
+              label="Amount"
+              value={serviceAmount}
+              onChangeText={value => {
+                setServiceAmount(value);
+                setErrors(current => ({
+                  ...current,
+                  serviceAmount: '',
+                  form: '',
+                }));
+              }}
+              keyboardType="decimal-pad"
+              style={styles.input}
             />
-          ) : (
-            <Text style={styles.emptyText}>No sales recorded today.</Text>
-          )}
-        </SurfaceCard>
-
-        {isLoading ? <Text style={styles.loadingText}>Refreshing local data...</Text> : null}
-      </ScrollView>
+            {errors.serviceAmount ? (
+              <Text style={styles.errorText}>{errors.serviceAmount}</Text>
+            ) : null}
+            <Text style={styles.fieldLabel}>Payment Method</Text>
+            <SegmentedButtons
+              value={servicePaymentMethod}
+              onValueChange={setServicePaymentMethod}
+              buttons={[
+                {value: 'cash', label: 'Cash'},
+                {value: 'bank', label: 'Bank Transfer'},
+              ]}
+              style={styles.segmented}
+            />
+            <Text style={styles.fieldLabel}>Service Type</Text>
+            {serviceTypes.length === 0 ? (
+              <Text style={styles.emptyText}>
+                No service types yet. Go to Settings to add some.
+              </Text>
+            ) : (
+              <Menu
+                visible={serviceTypeMenuVisible}
+                onDismiss={() => setServiceTypeMenuVisible(false)}
+                anchor={
+                  <Button
+                    mode="outlined"
+                    onPress={() => setServiceTypeMenuVisible(true)}
+                    style={styles.menuButton}>
+                    {selectedServiceType?.name || 'Select service type'}
+                  </Button>
+                }>
+                {serviceTypes.map(item => (
+                  <Menu.Item
+                    key={item.id}
+                    title={item.name}
+                    onPress={() => {
+                      setSelectedServiceType(item);
+                      setServiceTypeMenuVisible(false);
+                      setErrors(current => ({
+                        ...current,
+                        serviceType: '',
+                        form: '',
+                      }));
+                    }}
+                  />
+                ))}
+              </Menu>
+            )}
+            {errors.serviceType ? (
+              <Text style={styles.errorText}>{errors.serviceType}</Text>
+            ) : null}
+            <TextInput
+              mode="outlined"
+              label="Notes"
+              value={serviceNotes}
+              onChangeText={setServiceNotes}
+              multiline
+              style={styles.input}
+            />
+            <Text style={styles.timestampText}>
+              Date/time will be set to {format(new Date(), 'PP p')}
+            </Text>
+            {errors.form ? (
+              <Text style={styles.errorText}>{errors.form}</Text>
+            ) : null}
+            <View style={styles.modalActions}>
+              <Button mode="outlined" onPress={closeServiceModal}>
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                loading={isSaving}
+                disabled={isSaving || serviceTypes.length === 0}
+                onPress={handleSaveService}>
+                Save Service
+              </Button>
+            </View>
+          </ScrollView>
+        </Modal>
+      </Portal>
 
       <Snackbar
-        visible={Boolean(successMessage)}
-        onDismiss={() => setSuccessMessage('')}
+        visible={Boolean(message)}
+        onDismiss={() => setMessage('')}
         duration={1800}>
-        {successMessage}
+        {message}
       </Snackbar>
     </KeyboardAvoidingView>
   );
@@ -399,51 +768,184 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     width: '100%',
   },
-  formCard: {
-    gap: 10,
+  header: {
+    paddingBottom: 16,
+    paddingTop: 30,
   },
-  inputWrap: {
-    justifyContent: 'center',
+  eyebrow: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    marginBottom: 6,
+    textTransform: 'uppercase',
   },
-  inputIcon: {
-    left: 16,
-    position: 'absolute',
-    zIndex: 1,
-  },
-  input: {
-    backgroundColor: COLORS.background,
-    borderColor: COLORS.line,
-    borderRadius: 18,
-    borderWidth: 1,
+  title: {
     color: COLORS.text,
     fontFamily: FONT_FAMILY,
-    fontSize: 15,
-    minHeight: 52,
-    paddingHorizontal: 16,
-    paddingLeft: 44,
+    fontSize: 30,
+    fontWeight: '800',
+    lineHeight: 38,
   },
-  dropdownCard: {
+  subtitle: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 4,
+  },
+  balanceCard: {
     backgroundColor: COLORS.surface,
-    borderColor: COLORS.line,
-    borderRadius: 18,
-    borderWidth: 1,
-    overflow: 'hidden',
+    borderRadius: 8,
+    marginBottom: 16,
   },
-  dropdownList: {
-    maxHeight: 220,
+  cardTitle: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 18,
+    fontWeight: '800',
   },
-  optionRow: {
-    alignItems: 'center',
-    borderBottomColor: COLORS.line,
-    borderBottomWidth: 1,
+  segmented: {
+    marginTop: 12,
+  },
+  balanceGrid: {
     flexDirection: 'row',
-    minHeight: 64,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 10,
+    marginTop: 14,
+  },
+  balanceTile: {
+    backgroundColor: COLORS.primaryPale,
+    borderRadius: 8,
+    flex: 1,
+    padding: 12,
+  },
+  balanceLabel: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  balanceValue: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 17,
+    fontWeight: '800',
+    marginTop: 6,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  actionButton: {
+    borderRadius: 8,
+    flex: 1,
+  },
+  actionButtonContent: {
+    minHeight: 58,
+  },
+  listCard: {
+    borderRadius: 8,
+  },
+  sectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  listGap: {
+    height: 10,
+  },
+  transactionCard: {
+    borderRadius: 8,
+    borderLeftWidth: 5,
+    marginTop: 12,
+  },
+  saleBorder: {
+    borderLeftColor: COLORS.accent,
+  },
+  serviceBorder: {
+    borderLeftColor: COLORS.success,
+  },
+  transactionTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  transactionText: {
+    flex: 1,
+  },
+  transactionTitle: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
+  },
+  transactionMeta: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  transactionAmountWrap: {
+    alignItems: 'flex-end',
+  },
+  transactionAmount: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  paymentChip: {
+    marginTop: 6,
+  },
+  emptyText: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    lineHeight: 20,
+    paddingVertical: 14,
+    textAlign: 'center',
+  },
+  errorText: {
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  modalCard: {
+    alignSelf: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    maxHeight: '88%',
+    maxWidth: 448,
+    padding: 18,
+    width: '92%',
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 21,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  input: {
+    backgroundColor: COLORS.surface,
+    marginTop: 10,
+  },
+  optionCard: {
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  selectedOptionCard: {
+    backgroundColor: COLORS.primaryPale,
+    borderColor: COLORS.primary,
+  },
+  optionContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
   },
   optionText: {
     flex: 1,
-    paddingRight: 12,
   },
   optionTitle: {
     color: COLORS.text,
@@ -456,150 +958,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  dropdownEmpty: {
-    color: COLORS.muted,
-    fontFamily: FONT_FAMILY,
-    padding: 14,
-    textAlign: 'center',
-  },
-  selectedBox: {
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: 18,
-    padding: 12,
-  },
-  selectedTitle: {
-    color: COLORS.primary,
-    fontFamily: FONT_FAMILY,
-    fontWeight: '800',
-  },
-  selectedDescription: {
-    color: COLORS.primaryDark,
-    fontFamily: FONT_FAMILY,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  quantityRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  quantityButton: {
-    alignItems: 'center',
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: 16,
-    height: 50,
-    justifyContent: 'center',
-    width: 50,
-  },
-  quantityInput: {
-    backgroundColor: COLORS.background,
-    borderColor: COLORS.line,
-    borderRadius: 18,
-    borderWidth: 1,
+  fieldLabel: {
     color: COLORS.text,
-    flex: 1,
     fontFamily: FONT_FAMILY,
-    fontSize: 17,
+    fontSize: 13,
     fontWeight: '800',
-    minHeight: 52,
-    paddingHorizontal: 16,
-    textAlign: 'center',
+    marginTop: 14,
   },
-  totalBox: {
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: 22,
-    padding: 16,
-  },
-  totalLabel: {
-    color: COLORS.primary,
-    fontFamily: FONT_FAMILY,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.2,
+  totalCard: {
+    backgroundColor: COLORS.primaryPale,
+    borderRadius: 8,
+    marginTop: 14,
   },
   totalValue: {
-    color: COLORS.text,
-    fontSize: 30,
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 25,
+    fontWeight: '800',
     marginTop: 4,
   },
-  errorText: {
-    color: COLORS.danger,
-    fontFamily: FONT_FAMILY,
-    fontSize: 12,
+  menuButton: {
+    alignItems: 'stretch',
+    borderRadius: 8,
+    marginTop: 10,
   },
-  warningText: {
-    backgroundColor: COLORS.warningSoft,
-    borderRadius: 14,
-    color: COLORS.warning,
-    fontFamily: FONT_FAMILY,
-    fontSize: 12,
-    fontWeight: '800',
-    overflow: 'hidden',
-    padding: 10,
-  },
-  emptyProductBox: {
-    alignItems: 'center',
-    paddingVertical: 18,
-  },
-  emptyTitle: {
-    color: COLORS.text,
-    fontFamily: FONT_FAMILY,
-    fontWeight: '800',
-  },
-  emptyText: {
+  timestampText: {
     color: COLORS.muted,
     fontFamily: FONT_FAMILY,
-    paddingVertical: 16,
-    textAlign: 'center',
+    fontSize: 12,
+    marginTop: 10,
   },
-  listCard: {
-    marginTop: 16,
-    paddingBottom: 4,
-  },
-  sectionHead: {
-    alignItems: 'center',
+  modalActions: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    color: COLORS.text,
-    fontFamily: FONT_FAMILY,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  saleRow: {
-    alignItems: 'center',
-    borderTopColor: COLORS.line,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 70,
-    paddingVertical: 12,
-  },
-  saleDetails: {
-    flex: 1,
-  },
-  saleTitle: {
-    color: COLORS.text,
-    fontFamily: FONT_FAMILY,
-    fontWeight: '800',
-  },
-  saleDescription: {
-    color: COLORS.muted,
-    fontFamily: FONT_FAMILY,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  saleTotal: {
-    color: COLORS.success,
-    fontSize: 14,
-  },
-  loadingText: {
-    color: COLORS.muted,
-    fontFamily: FONT_FAMILY,
-    marginTop: 12,
-    textAlign: 'center',
+    gap: 10,
+    justifyContent: 'flex-end',
+    marginTop: 18,
   },
 });
 

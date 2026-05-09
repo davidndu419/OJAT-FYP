@@ -39,9 +39,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'A valid sale id is required' });
     }
 
+    if (req.body.payment_method && !['cash', 'bank'].includes(req.body.payment_method)) {
+      return res.status(400).json({ message: 'payment_method must be cash or bank' });
+    }
+
     const sale = {
       ...req.body,
       id: recordId,
+      payment_method: req.body.payment_method || 'cash',
     };
     const saleRef = userSalesCollection(req.userId).doc(recordId);
 

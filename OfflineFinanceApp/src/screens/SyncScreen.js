@@ -4,10 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   CheckCircle2,
   Package,
-  RefreshCw,
   ShoppingBag,
+  Tags,
   Wallet,
   Wifi,
+  Wrench,
 } from 'lucide-react-native';
 import {ActivityIndicator, Snackbar, Text} from 'react-native-paper';
 import {
@@ -20,12 +21,28 @@ import {
   syncToServer,
 } from '../services/syncService';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
-import {IconBubble, KoboButton, ScreenHeader, SurfaceCard, type} from '../components/KoboUI';
+import {
+  IconBubble,
+  KoboButton,
+  ScreenHeader,
+  SurfaceCard,
+  type,
+} from '../components/KoboUI';
 
 const emptyCounts = {
   products: 0,
   sales: 0,
   expenses: 0,
+  services: 0,
+  serviceTypes: 0,
+};
+
+const syncLabels = {
+  products: 'products',
+  sales: 'sales',
+  expenses: 'expenses',
+  services: 'services',
+  serviceTypes: 'service types',
 };
 
 const formatLastSync = value => {
@@ -40,6 +57,30 @@ const formatLastSync = value => {
   }
 
   return date.toLocaleString();
+};
+
+const getTotalCount = counts =>
+  Object.values(counts).reduce((sum, value) => sum + Number(value || 0), 0);
+
+const formatSyncCounts = synced => {
+  const counts = {...emptyCounts, ...(synced || {})};
+
+  return Object.entries(syncLabels)
+    .map(([key, label]) => `${label}: ${Number(counts[key] || 0)}`)
+    .join(', ');
+};
+
+const formatSyncMessage = result => {
+  const countSummary = formatSyncCounts(result?.synced);
+
+  if (result?.success) {
+    return `Sync complete. ${countSummary}.`;
+  }
+
+  const errors = Array.isArray(result?.errors) ? result.errors : [];
+  const errorSummary = errors.length > 0 ? ` Errors: ${errors.join(' | ')}` : '';
+
+  return `Sync finished with ${errors.length} error(s). ${countSummary}.${errorSummary}`;
 };
 
 function SyncScreen() {
@@ -65,6 +106,8 @@ function SyncScreen() {
         products: Number(counts.products || 0),
         sales: Number(counts.sales || 0),
         expenses: Number(counts.expenses || 0),
+        services: Number(counts.services || 0),
+        serviceTypes: Number(counts.serviceTypes || 0),
       });
       setLastSync(storedLastSync || '');
     } catch (error) {
@@ -117,13 +160,7 @@ function SyncScreen() {
     try {
       const result = await syncToServer();
 
-      if (result.success) {
-        setMessage(`Sync complete. ${result.synced} record(s) processed.`);
-      } else {
-        setMessage(
-          `Sync finished with ${result.errors.length} error(s). Unsynced records were kept locally.`,
-        );
-      }
+      setMessage(formatSyncMessage(result));
 
       await loadSyncInfo();
     } catch (error) {
@@ -134,12 +171,13 @@ function SyncScreen() {
     }
   };
 
-  const totalPending =
-    pendingCounts.products + pendingCounts.sales + pendingCounts.expenses;
+  const totalPending = getTotalCount(pendingCounts);
   const rows = [
     {label: 'Products', value: pendingCounts.products, icon: Package},
     {label: 'Sales', value: pendingCounts.sales, icon: ShoppingBag},
     {label: 'Expenses', value: pendingCounts.expenses, icon: Wallet},
+    {label: 'Services', value: pendingCounts.services, icon: Wrench},
+    {label: 'Service Types', value: pendingCounts.serviceTypes, icon: Tags},
   ];
 
   return (
@@ -151,7 +189,9 @@ function SyncScreen() {
       />
 
       <SurfaceCard style={styles.connectivityCard}>
-        <IconBubble tone={networkStatus.isOnline ? 'success' : 'danger'} size={54}>
+        <IconBubble
+          tone={networkStatus.isOnline ? 'success' : 'danger'}
+          size={54}>
           <Wifi
             color={networkStatus.isOnline ? COLORS.success : COLORS.danger}
             size={24}

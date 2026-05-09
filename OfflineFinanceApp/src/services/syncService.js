@@ -6,20 +6,39 @@ import {
   getExpenses,
   getProducts,
   getSales,
+  getServiceTypes,
+  getServices,
   postExpense,
   postProduct,
   postSale,
+  postService,
+  postServiceType,
 } from './apiService';
 
 export const LAST_SUCCESSFUL_SYNC_KEY = 'last_successful_sync_at';
 
-const SYNC_TABLES = ['products', 'sales', 'expenses'];
+const emptySyncedCounts = {
+  products: 0,
+  sales: 0,
+  expenses: 0,
+  services: 0,
+  serviceTypes: 0,
+};
+
+const SYNC_TABLES = [
+  'products',
+  'sales',
+  'expenses',
+  'services',
+  'service_types',
+];
 
 const TABLE_CONFIG = {
   products: {
+    resultKey: 'products',
     post: postProduct,
     get: getProducts,
-    responseKey: 'products',
+    responseKeys: ['products'],
     columns: [
       'id',
       'name',
@@ -42,18 +61,52 @@ const TABLE_CONFIG = {
     ],
   },
   sales: {
+    resultKey: 'sales',
     post: postSale,
     get: getSales,
-    responseKey: 'sales',
-    columns: ['id', 'product_id', 'quantity', 'total', 'date', 'synced'],
-    updateColumns: ['product_id', 'quantity', 'total', 'date'],
+    responseKeys: ['sales'],
+    columns: [
+      'id',
+      'product_id',
+      'quantity',
+      'total',
+      'date',
+      'payment_method',
+      'synced',
+    ],
+    updateColumns: ['product_id', 'quantity', 'total', 'date', 'payment_method'],
   },
   expenses: {
+    resultKey: 'expenses',
     post: postExpense,
     get: getExpenses,
-    responseKey: 'expenses',
+    responseKeys: ['expenses'],
     columns: ['id', 'category', 'description', 'amount', 'date', 'synced'],
     updateColumns: ['category', 'description', 'amount', 'date'],
+  },
+  services: {
+    resultKey: 'services',
+    post: postService,
+    get: getServices,
+    responseKeys: ['services'],
+    columns: [
+      'id',
+      'service_type',
+      'amount',
+      'payment_method',
+      'date',
+      'notes',
+      'synced',
+    ],
+    updateColumns: ['service_type', 'amount', 'payment_method', 'date', 'notes'],
+  },
+  service_types: {
+    resultKey: 'serviceTypes',
+    post: postServiceType,
+    get: getServiceTypes,
+    responseKeys: ['serviceTypes', 'service_types'],
+    columns: ['id', 'name', 'created_at', 'updated_at', 'synced'],
+    updateColumns: ['name', 'created_at', 'updated_at'],
   },
 };
 
@@ -65,23 +118,28 @@ const addError = (errors, scope, error) => {
   errors.push(entry);
 };
 
-const normalizeRecords = (response, responseKey) => {
+const normalizeRecords = (response, responseKeys) => {
   const payload = response?.data;
+  const keys = Array.isArray(responseKeys) ? responseKeys : [responseKeys];
 
   if (Array.isArray(payload)) {
     return payload;
   }
 
-  if (Array.isArray(payload?.[responseKey])) {
-    return payload[responseKey];
+  for (const responseKey of keys) {
+    if (Array.isArray(payload?.[responseKey])) {
+      return payload[responseKey];
+    }
   }
 
   if (Array.isArray(payload?.data)) {
     return payload.data;
   }
 
-  if (Array.isArray(payload?.data?.[responseKey])) {
-    return payload.data[responseKey];
+  for (const responseKey of keys) {
+    if (Array.isArray(payload?.data?.[responseKey])) {
+      return payload.data[responseKey];
+    }
   }
 
   return [];
@@ -118,6 +176,10 @@ const getLocalRecord = async (db, tableName, id) => {
 const getColumnValue = (record, column) => {
   if (column === 'synced') {
     return 1;
+  }
+
+  if (column === 'payment_method') {
+    return record?.payment_method || 'cash';
   }
 
   if (column === 'date') {
@@ -158,8 +220,15 @@ const updateRecord = async (db, tableName, columns, record) => {
 
 const syncUnsyncedTable = async (db, tableName, errors) => {
   const config = TABLE_CONFIG[tableName];
-  const rows = await getUnsyncedRows(db, tableName);
   let synced = 0;
+  let rows = [];
+
+  try {
+    rows = await getUnsyncedRows(db, tableName);
+  } catch (error) {
+    addError(errors, `Read unsynced ${tableName}`, error);
+    return synced;
+  }
 
   for (const row of rows) {
     try {
@@ -180,7 +249,7 @@ const pullTableFromServer = async (db, tableName, errors) => {
 
   try {
     const response = await config.get();
-    const serverRecords = normalizeRecords(response, config.responseKey);
+    const serverRecords = normalizeRecords(response, config.responseKeys);
 
     for (const serverRecord of serverRecords) {
       if (!serverRecord?.id) {
@@ -220,13 +289,20 @@ const pullTableFromServer = async (db, tableName, errors) => {
 
 export const getPendingSyncCounts = async () => {
   const db = await getDBConnection();
-  const counts = {};
+  const counts = {...emptySyncedCounts};
 
   for (const tableName of SYNC_TABLES) {
-    const [result] = await db.executeSql(
-      `SELECT COUNT(*) AS count FROM ${tableName} WHERE synced = 0`,
-    );
-    counts[tableName] = result.rows.item(0).count;
+    const config = TABLE_CONFIG[tableName];
+
+    try {
+      const [result] = await db.executeSql(
+        `SELECT COUNT(*) AS count FROM ${tableName} WHERE synced = 0`,
+      );
+      counts[config.resultKey] = result.rows.item(0).count;
+    } catch (error) {
+      addError([], `Count ${tableName}`, error);
+      counts[config.resultKey] = 0;
+    }
   }
 
   return counts;
@@ -241,27 +317,37 @@ export const syncToServer = async () => {
 
     return {
       success: true,
-      synced: 0,
+      synced: {...emptySyncedCounts},
       errors: [],
     };
   }
 
   const result = {
     success: false,
-    synced: 0,
+    synced: {...emptySyncedCounts},
     errors: [],
   };
 
   try {
     const db = await getDBConnection();
 
-    result.synced += await syncUnsyncedTable(db, 'products', result.errors);
-    result.synced += await syncUnsyncedTable(db, 'sales', result.errors);
-    result.synced += await syncUnsyncedTable(db, 'expenses', result.errors);
+    for (const tableName of SYNC_TABLES) {
+      const config = TABLE_CONFIG[tableName];
+      result.synced[config.resultKey] += await syncUnsyncedTable(
+        db,
+        tableName,
+        result.errors,
+      );
+    }
 
-    result.synced += await pullTableFromServer(db, 'products', result.errors);
-    result.synced += await pullTableFromServer(db, 'sales', result.errors);
-    result.synced += await pullTableFromServer(db, 'expenses', result.errors);
+    for (const tableName of SYNC_TABLES) {
+      const config = TABLE_CONFIG[tableName];
+      result.synced[config.resultKey] += await pullTableFromServer(
+        db,
+        tableName,
+        result.errors,
+      );
+    }
 
     result.success = result.errors.length === 0;
 

@@ -8,6 +8,8 @@ const authRoutes = require('./routes/auth');
 const productsRoutes = require('./routes/products');
 const salesRoutes = require('./routes/sales');
 const expensesRoutes = require('./routes/expenses');
+const servicesRoutes = require('./routes/services');
+const serviceTypesRoutes = require('./routes/serviceTypes');
 const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
@@ -32,6 +34,8 @@ app.use('/auth', authRoutes);
 app.use('/api/products', authMiddleware, productsRoutes);
 app.use('/api/sales', authMiddleware, salesRoutes);
 app.use('/api/expenses', authMiddleware, expensesRoutes);
+app.use('/api/services', authMiddleware, servicesRoutes);
+app.use('/api/service-types', authMiddleware, serviceTypesRoutes);
 
 app.use((req, res) => {
   res.status(400).json({ message: 'Route not found' });

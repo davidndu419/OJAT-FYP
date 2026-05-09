@@ -5,7 +5,6 @@ import {useFocusEffect} from '@react-navigation/native';
 import {useDispatch, useSelector} from 'react-redux';
 import {
   ArrowUpRight,
-  Bell,
   CreditCard,
   Package,
   ShoppingBag,
@@ -205,8 +204,7 @@ function DashboardScreen({navigation}) {
             activeOpacity={0.84}
             onPress={handleLogout}
             style={styles.bellButton}>
-            <Bell color={COLORS.primary} size={21} strokeWidth={2.4} />
-            <View style={styles.notificationDot} />
+            <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
 
@@ -329,13 +327,19 @@ const styles = StyleSheet.create({
   },
   bellButton: {
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.line,
+    backgroundColor: COLORS.dangerSoft,
+    borderColor: COLORS.danger,
     borderRadius: 18,
     borderWidth: 1,
-    height: 44,
     justifyContent: 'center',
-    width: 44,
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  logoutText: {
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
+    fontSize: 13,
+    fontWeight: '800',
   },
   notificationDot: {
     backgroundColor: COLORS.danger,

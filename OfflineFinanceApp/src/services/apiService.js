@@ -65,6 +65,14 @@ export const postExpense = data => apiClient.post('/api/expenses', data);
 
 export const getExpenses = () => apiClient.get('/api/expenses');
 
+export const postService = data => apiClient.post('/api/services', data);
+
+export const getServices = () => apiClient.get('/api/services');
+
+export const postServiceType = data => apiClient.post('/api/service-types', data);
+
+export const getServiceTypes = () => apiClient.get('/api/service-types');
+
 export const apiService = {
   get: (url, config = {}) => apiClient.get(url, config),
   post: (url, data = {}, config = {}) => apiClient.post(url, data, config),

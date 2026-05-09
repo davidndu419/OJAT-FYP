@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   Package,
   RefreshCw,
+  Settings,
   ShoppingBag,
   Wallet,
 } from 'lucide-react-native';
@@ -26,6 +27,7 @@ import AddEditProductScreen from '../screens/AddEditProductScreen';
 import SalesScreen from '../screens/SalesScreen';
 import ExpenseScreen from '../screens/ExpenseScreen';
 import ReportsScreen from '../screens/ReportsScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import SyncScreen from '../screens/SyncScreen';
 import {STORAGE_KEYS} from '../utils/constants';
 import {loginSuccess} from '../store/slices/authSlice';
@@ -34,6 +36,8 @@ import {gradientStyle} from '../components/KoboUI';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+
+const renderKoboTabBar = props => <KoboTabBar {...props} />;
 
 function InventoryStack() {
   return (
@@ -63,7 +67,7 @@ function MainTabs() {
   return (
     <Tab.Navigator
       initialRouteName="Dashboard"
-      tabBar={props => <KoboTabBar {...props} />}
+      tabBar={renderKoboTabBar}
       screenOptions={{
         headerShown: false,
       }}>
@@ -85,6 +89,7 @@ function MainTabs() {
       />
       <Tab.Screen name="Reports" component={ReportsScreen} />
       <Tab.Screen name="Sync" component={SyncScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
 }
@@ -97,6 +102,7 @@ const getTabIcon = routeName => {
     Expenses: Wallet,
     Reports: BarChart3,
     Sync: RefreshCw,
+    Settings,
   };
 
   return icons[routeName] || LayoutGrid;

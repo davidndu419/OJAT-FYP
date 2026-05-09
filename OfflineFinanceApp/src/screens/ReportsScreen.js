@@ -1,13 +1,33 @@
 import React, {useCallback, useMemo, useState} from 'react';
-import {ScrollView, StyleSheet, TextInput, TouchableOpacity, View} from 'react-native';
+import {Dimensions, ScrollView, StyleSheet, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {ChevronLeft, ChevronRight, Star, TrendingUp} from 'lucide-react-native';
-import {Text} from 'react-native-paper';
-import {format, formatISO, isValid, parseISO, subDays} from 'date-fns';
-import {getDBConnection} from '../database/db';
+import {
+  ActivityIndicator,
+  Button,
+  Card,
+  Divider,
+  SegmentedButtons,
+  Text,
+  TextInput,
+} from 'react-native-paper';
+import {BarChart, PieChart} from 'react-native-chart-kit';
+import {format, formatISO, isValid, parseISO} from 'date-fns';
+import {getDBConnection, getSetting} from '../database/db';
 import {formatCurrency, getRowsArray} from '../utils/helpers';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
-import {HeroCard, IconBubble, KoboButton, ScreenHeader, SurfaceCard, gradientStyle, type} from '../components/KoboUI';
+
+const chartWidth = Math.min(Dimensions.get('window').width - 56, 392);
+
+const chartConfig = {
+  backgroundGradientFrom: COLORS.surface,
+  backgroundGradientTo: COLORS.surface,
+  color: (opacity = 1) => `rgba(31, 58, 95, ${opacity})`,
+  decimalPlaces: 0,
+  labelColor: (opacity = 1) => `rgba(102, 112, 133, ${opacity})`,
+  propsForBackgroundLines: {
+    stroke: COLORS.line,
+  },
+};
 
 const formatDateInput = date => format(date, 'yyyy-MM-dd');
 
@@ -42,45 +62,69 @@ const buildRange = (fromInput, toInput) => {
   return {
     fromDate,
     toDate,
-    startDate: formatISO(new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())),
+    startDate: formatISO(
+      new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate()),
+    ),
     endDate: formatISO(
-      new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999),
+      new Date(
+        toDate.getFullYear(),
+        toDate.getMonth(),
+        toDate.getDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
     ),
   };
 };
 
-const buildSevenDays = dailySales => {
-  const today = new Date();
-  const salesMap = dailySales.reduce((acc, item) => {
-    acc[item.day] = Number(item.total || 0);
-    return acc;
-  }, {});
-
-  return Array.from({length: 7}).map((_, index) => {
-    const date = subDays(today, 6 - index);
-    const key = formatDateInput(date);
-    return {
-      label: format(date, 'EEEEE'),
-      value: salesMap[key] || 0,
-    };
-  });
+const emptyReport = {
+  salesRevenue: 0,
+  salesCash: 0,
+  salesBank: 0,
+  costOfGoodsSold: 0,
+  grossProfit: 0,
+  salesExpense: 0,
+  netSalesProfit: 0,
+  serviceRevenue: 0,
+  serviceCash: 0,
+  serviceBank: 0,
+  serviceExpense: 0,
+  netServiceProfit: 0,
+  totalExpenses: 0,
+  totalRevenue: 0,
+  totalCash: 0,
+  totalBank: 0,
+  netProfit: 0,
+  bestSellingProduct: 'None',
+  mostPopularServiceType: 'None',
+  expensesByCategory: [],
+  dailySales: [],
+  dailyServices: [],
+  serviceTypeRevenue: [],
+  serviceTransactions: [],
+  profitTrend: [],
+  allocation: 'combined',
+  salesPercent: 60,
+  servicesPercent: 40,
 };
+
+const toChartData = rows => ({
+  labels: rows.map(item => item.label),
+  datasets: [{data: rows.map(item => Math.max(0, Number(item.value || 0)))}],
+});
+
+const hasChartData = rows => rows.some(item => Number(item.value || 0) > 0);
 
 function ReportsScreen() {
   const defaultRange = useMemo(() => getDefaultRange(), []);
   const [fromDate, setFromDate] = useState(defaultRange.from);
   const [toDate, setToDate] = useState(defaultRange.to);
+  const [activeTab, setActiveTab] = useState('sales');
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-  const [report, setReport] = useState({
-    dailySales: [],
-    expensesByCategory: [],
-    totalRevenue: 0,
-    totalExpenses: 0,
-    netProfit: 0,
-    bestSellingProduct: 'None',
-    mostExpensiveCategory: 'None',
-  });
+  const [report, setReport] = useState(emptyReport);
 
   const loadReport = useCallback(async (fromInput, toInput) => {
     const range = buildRange(fromInput, toInput);
@@ -96,91 +140,220 @@ function ReportsScreen() {
     setIsLoading(true);
     try {
       const db = await getDBConnection();
+      const [
+        salesSummaryResult,
+        dailySalesResult,
+        expensesByCategoryResult,
+        expenseTotalResult,
+        bestSellingResult,
+        serviceSummaryResult,
+        dailyServicesResult,
+        serviceTypeRevenueResult,
+        popularServiceResult,
+        serviceTransactionsResult,
+        dailyExpensesResult,
+        allocationValue,
+        salesPercentValue,
+        servicesPercentValue,
+      ] = await Promise.all([
+        db.executeSql(
+          `SELECT COALESCE(SUM(sales.total), 0) AS revenue,
+                  COALESCE(SUM(CASE WHEN COALESCE(sales.payment_method, 'cash') = 'cash' THEN sales.total ELSE 0 END), 0) AS cash,
+                  COALESCE(SUM(CASE WHEN COALESCE(sales.payment_method, 'cash') = 'bank' THEN sales.total ELSE 0 END), 0) AS bank,
+                  COALESCE(SUM(COALESCE(products.cost_price, 0) * COALESCE(sales.quantity, 0)), 0) AS cogs
+           FROM sales
+           LEFT JOIN products ON products.id = sales.product_id
+           WHERE sales.date BETWEEN ? AND ?;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT substr(date, 1, 10) AS day,
+                  COALESCE(SUM(total), 0) AS total
+           FROM sales
+           WHERE date BETWEEN ? AND ?
+           GROUP BY substr(date, 1, 10)
+           ORDER BY day ASC;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT category,
+                  COALESCE(SUM(amount), 0) AS total
+           FROM expenses
+           WHERE date BETWEEN ? AND ?
+           GROUP BY category
+           ORDER BY total DESC;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT COALESCE(SUM(amount), 0) AS total
+           FROM expenses
+           WHERE date BETWEEN ? AND ?;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT products.name AS product_name,
+                  COALESCE(SUM(sales.quantity), 0) AS total_quantity
+           FROM sales
+           LEFT JOIN products ON products.id = sales.product_id
+           WHERE sales.date BETWEEN ? AND ?
+           GROUP BY sales.product_id
+           ORDER BY total_quantity DESC
+           LIMIT 1;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT COALESCE(SUM(amount), 0) AS revenue,
+                  COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN amount ELSE 0 END), 0) AS cash,
+                  COALESCE(SUM(CASE WHEN payment_method = 'bank' THEN amount ELSE 0 END), 0) AS bank
+           FROM services
+           WHERE date BETWEEN ? AND ?;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT substr(date, 1, 10) AS day,
+                  COALESCE(SUM(amount), 0) AS total
+           FROM services
+           WHERE date BETWEEN ? AND ?
+           GROUP BY substr(date, 1, 10)
+           ORDER BY day ASC;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT service_type,
+                  COALESCE(SUM(amount), 0) AS total
+           FROM services
+           WHERE date BETWEEN ? AND ?
+           GROUP BY service_type
+           ORDER BY total DESC;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT service_type,
+                  COUNT(*) AS total_count
+           FROM services
+           WHERE date BETWEEN ? AND ?
+           GROUP BY service_type
+           ORDER BY total_count DESC
+           LIMIT 1;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT *
+           FROM services
+           WHERE date BETWEEN ? AND ?
+           ORDER BY date DESC;`,
+          [range.startDate, range.endDate],
+        ),
+        db.executeSql(
+          `SELECT substr(date, 1, 10) AS day,
+                  COALESCE(SUM(amount), 0) AS total
+           FROM expenses
+           WHERE date BETWEEN ? AND ?
+           GROUP BY substr(date, 1, 10)
+           ORDER BY day ASC;`,
+          [range.startDate, range.endDate],
+        ),
+        getSetting('expense_allocation'),
+        getSetting('sales_expense_percent'),
+        getSetting('services_expense_percent'),
+      ]);
 
-      const [dailySalesResult] = await db.executeSql(
-        `SELECT substr(date, 1, 10) AS day,
-                COALESCE(SUM(total), 0) AS total
-         FROM sales
-         WHERE date BETWEEN ? AND ?
-         GROUP BY substr(date, 1, 10)
-         ORDER BY day ASC;`,
-        [range.startDate, range.endDate],
+      const salesSummary = salesSummaryResult[0].rows.item(0);
+      const serviceSummary = serviceSummaryResult[0].rows.item(0);
+      const totalExpenses = Number(
+        expenseTotalResult[0].rows.item(0).total || 0,
       );
-      const [expensesByCategoryResult] = await db.executeSql(
-        `SELECT category,
-                COALESCE(SUM(amount), 0) AS total
-         FROM expenses
-         WHERE date BETWEEN ? AND ?
-         GROUP BY category
-         ORDER BY total DESC;`,
-        [range.startDate, range.endDate],
+      const allocation = allocationValue || 'combined';
+      const salesPercent = Number(salesPercentValue || 60);
+      const servicesPercent = Number(servicesPercentValue || 40);
+      const salesRevenue = Number(salesSummary.revenue || 0);
+      const salesCash = Number(salesSummary.cash || 0);
+      const salesBank = Number(salesSummary.bank || 0);
+      const costOfGoodsSold = Number(salesSummary.cogs || 0);
+      const grossProfit = salesRevenue - costOfGoodsSold;
+      const serviceRevenue = Number(serviceSummary.revenue || 0);
+      const serviceCash = Number(serviceSummary.cash || 0);
+      const serviceBank = Number(serviceSummary.bank || 0);
+      const salesExpense =
+        allocation === 'split'
+          ? totalExpenses * (salesPercent / 100)
+          : totalExpenses;
+      const serviceExpense =
+        allocation === 'split'
+          ? totalExpenses * (servicesPercent / 100)
+          : totalExpenses;
+      const dailySales = getRowsArray(dailySalesResult[0]).map(item => ({
+        label: format(parseISO(item.day), 'MMM d'),
+        day: item.day,
+        value: Number(item.total || 0),
+      }));
+      const dailyServices = getRowsArray(dailyServicesResult[0]).map(item => ({
+        label: format(parseISO(item.day), 'MMM d'),
+        day: item.day,
+        value: Number(item.total || 0),
+      }));
+      const expenseByDay = getRowsArray(dailyExpensesResult[0]).reduce(
+        (acc, item) => {
+          acc[item.day] = Number(item.total || 0);
+          return acc;
+        },
+        {},
       );
-      const [revenueResult] = await db.executeSql(
-        `SELECT COALESCE(SUM(total), 0) AS total
-         FROM sales
-         WHERE date BETWEEN ? AND ?;`,
-        [range.startDate, range.endDate],
+      const revenueByDay = [...dailySales, ...dailyServices].reduce(
+        (acc, item) => {
+          acc[item.day] = Number(acc[item.day] || 0) + Number(item.value || 0);
+          return acc;
+        },
+        {},
       );
-      const [expenseTotalResult] = await db.executeSql(
-        `SELECT COALESCE(SUM(amount), 0) AS total
-         FROM expenses
-         WHERE date BETWEEN ? AND ?;`,
-        [range.startDate, range.endDate],
-      );
-      const [bestSellingResult] = await db.executeSql(
-        `SELECT products.name AS product_name,
-                COALESCE(SUM(sales.quantity), 0) AS total_quantity
-         FROM sales
-         LEFT JOIN products ON products.id = sales.product_id
-         WHERE sales.date BETWEEN ? AND ?
-         GROUP BY sales.product_id
-         ORDER BY total_quantity DESC
-         LIMIT 1;`,
-        [range.startDate, range.endDate],
-      );
-      const [expensiveCategoryResult] = await db.executeSql(
-        `SELECT category,
-                COALESCE(SUM(amount), 0) AS total
-         FROM expenses
-         WHERE date BETWEEN ? AND ?
-         GROUP BY category
-         ORDER BY total DESC
-         LIMIT 1;`,
-        [range.startDate, range.endDate],
-      );
-
-      const dailySales = getRowsArray(dailySalesResult);
-      const expensesByCategory = getRowsArray(expensesByCategoryResult);
-      const totalRevenue = Number(revenueResult.rows.item(0).total || 0);
-      const totalExpenses = Number(expenseTotalResult.rows.item(0).total || 0);
-      const bestSellingProduct =
-        bestSellingResult.rows.length > 0
-          ? bestSellingResult.rows.item(0).product_name || 'Deleted product'
-          : 'None';
-      const mostExpensiveCategory =
-        expensiveCategoryResult.rows.length > 0
-          ? expensiveCategoryResult.rows.item(0).category
-          : 'None';
+      const profitTrend = Object.keys({...revenueByDay, ...expenseByDay})
+        .sort()
+        .map(day => ({
+          day,
+          label: format(parseISO(day), 'MMM d'),
+          value:
+            Number(revenueByDay[day] || 0) - Number(expenseByDay[day] || 0),
+        }));
 
       setReport({
-        dailySales,
-        expensesByCategory,
-        totalRevenue,
+        salesRevenue,
+        salesCash,
+        salesBank,
+        costOfGoodsSold,
+        grossProfit,
+        salesExpense,
+        netSalesProfit: grossProfit - salesExpense,
+        serviceRevenue,
+        serviceCash,
+        serviceBank,
+        serviceExpense,
+        netServiceProfit: serviceRevenue - serviceExpense,
         totalExpenses,
-        netProfit: totalRevenue - totalExpenses,
-        bestSellingProduct,
-        mostExpensiveCategory,
+        totalRevenue: salesRevenue + serviceRevenue,
+        totalCash: salesCash + serviceCash,
+        totalBank: salesBank + serviceBank,
+        netProfit: salesRevenue + serviceRevenue - totalExpenses,
+        bestSellingProduct:
+          bestSellingResult[0].rows.length > 0
+            ? bestSellingResult[0].rows.item(0).product_name ||
+              'Deleted product'
+            : 'None',
+        mostPopularServiceType:
+          popularServiceResult[0].rows.length > 0
+            ? popularServiceResult[0].rows.item(0).service_type
+            : 'None',
+        expensesByCategory: getRowsArray(expensesByCategoryResult[0]),
+        dailySales,
+        dailyServices,
+        serviceTypeRevenue: getRowsArray(serviceTypeRevenueResult[0]),
+        serviceTransactions: getRowsArray(serviceTransactionsResult[0]),
+        profitTrend,
+        allocation,
+        salesPercent,
+        servicesPercent,
       });
     } catch (error) {
-      setReport({
-        dailySales: [],
-        expensesByCategory: [],
-        totalRevenue: 0,
-        totalExpenses: 0,
-        netProfit: 0,
-        bestSellingProduct: 'None',
-        mostExpensiveCategory: 'None',
-      });
+      setReport(emptyReport);
       setErrors({form: 'Unable to load report data from SQLite.'});
     } finally {
       setIsLoading(false);
@@ -203,165 +376,382 @@ function ReportsScreen() {
     }
   };
 
-  const shiftDate = (field, days) => {
-    const input = field === 'from' ? fromDate : toDate;
-    const parsedDate = createDateFromInput(input) || new Date();
-    const nextDate = new Date(parsedDate);
-    nextDate.setDate(parsedDate.getDate() + days);
-    updateDate(field, formatDateInput(nextDate));
-  };
-
-  const sevenDays = useMemo(() => buildSevenDays(report.dailySales), [report.dailySales]);
-  const maxBar = Math.max(...sevenDays.map(item => item.value), 1);
-  const pnlRows = [
-    ['Total revenue', formatCurrency(report.totalRevenue)],
-    ['Total expenses', formatCurrency(report.totalExpenses)],
-    ['Net profit', formatCurrency(report.netProfit), true],
-    ['Best selling product', report.bestSellingProduct, false, 'star'],
-    ['Most expensive category', report.mostExpensiveCategory],
-  ];
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader
-        eyebrow="Reports"
-        title="Insights"
-        subtitle="Analyze sales, expenses, and profitability."
+      <View style={styles.header}>
+        <Text style={styles.eyebrow}>Reports</Text>
+        <Text style={styles.title}>Insights</Text>
+        <Text style={styles.subtitle}>
+          Sales, services, expenses, and profit from local SQLite records.
+        </Text>
+      </View>
+
+      <Card mode="outlined" style={styles.card}>
+        <Card.Content>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.cardTitle}>Date Range</Text>
+            {isLoading ? <ActivityIndicator size="small" /> : null}
+          </View>
+          <View style={styles.dateRow}>
+            <TextInput
+              mode="outlined"
+              label="From"
+              value={fromDate}
+              onChangeText={value => updateDate('from', value)}
+              style={styles.dateInput}
+            />
+            <TextInput
+              mode="outlined"
+              label="To"
+              value={toDate}
+              onChangeText={value => updateDate('to', value)}
+              style={styles.dateInput}
+            />
+          </View>
+          {errors.date ? (
+            <Text style={styles.errorText}>{errors.date}</Text>
+          ) : null}
+          {errors.form ? (
+            <Text style={styles.errorText}>{errors.form}</Text>
+          ) : null}
+          <Button
+            mode="contained"
+            onPress={() => loadReport(fromDate, toDate)}
+            loading={isLoading}
+            disabled={isLoading}
+            style={styles.applyButton}>
+            Apply Filter
+          </Button>
+        </Card.Content>
+      </Card>
+
+      <SegmentedButtons
+        value={activeTab}
+        onValueChange={setActiveTab}
+        buttons={[
+          {value: 'sales', label: 'Sales'},
+          {value: 'services', label: 'Services'},
+          {value: 'combined', label: 'Combined'},
+        ]}
+        style={styles.tabs}
       />
 
-      <SurfaceCard style={styles.filterCard}>
-        <Text style={styles.cardTitle}>Date Range</Text>
-        <DateField
-          label="From"
-          value={fromDate}
-          onChangeText={value => updateDate('from', value)}
-          onBack={() => shiftDate('from', -1)}
-          onForward={() => shiftDate('from', 1)}
-        />
-        <DateField
-          label="To"
-          value={toDate}
-          onChangeText={value => updateDate('to', value)}
-          onBack={() => shiftDate('to', -1)}
-          onForward={() => shiftDate('to', 1)}
-        />
-        {errors.date ? <Text style={styles.errorText}>{errors.date}</Text> : null}
-        {errors.form ? <Text style={styles.errorText}>{errors.form}</Text> : null}
-        <KoboButton
-          onPress={() => loadReport(fromDate, toDate)}
-          loading={isLoading}
-          disabled={isLoading}>
-          Apply Filter
-        </KoboButton>
-      </SurfaceCard>
-
-      <HeroCard variant="success" style={styles.profitHero}>
-        <View style={styles.heroRow}>
-          <TrendingUp color={COLORS.primaryForeground} size={18} />
-          <Text style={styles.heroEyebrow}>NET PROFIT</Text>
-        </View>
-        <Text style={[styles.profitAmount, type.number]}>
-          {formatCurrency(report.netProfit)}
-        </Text>
-        <View style={styles.glassRow}>
-          <View style={styles.glassTile}>
-            <Text style={styles.glassLabel}>Revenue</Text>
-            <Text style={[styles.glassValue, type.number]}>
-              {formatCurrency(report.totalRevenue)}
-            </Text>
-          </View>
-          <View style={styles.glassTile}>
-            <Text style={styles.glassLabel}>Expenses</Text>
-            <Text style={[styles.glassValue, type.number]}>
-              {formatCurrency(report.totalExpenses)}
-            </Text>
-          </View>
-        </View>
-      </HeroCard>
-
-      <SurfaceCard style={styles.chartCard}>
-        <Text style={styles.cardTitle}>Daily Sales</Text>
-        <View style={styles.barChart}>
-          {sevenDays.map((item, index) => {
-            const height = 26 + (item.value / maxBar) * 116;
-            const isLast = index === sevenDays.length - 1;
-            return (
-              <View key={`${item.label}-${index}`} style={styles.barItem}>
-                <View
-                  style={[
-                    styles.bar,
-                    {height},
-                    isLast ? gradientStyle('primary') : styles.barSoft,
-                  ]}
-                />
-                <Text style={styles.barLabel}>{item.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-      </SurfaceCard>
-
-      <SurfaceCard style={styles.chartCard}>
-        <Text style={styles.cardTitle}>Expenses by Category</Text>
-        {report.expensesByCategory.length > 0 ? (
-          report.expensesByCategory.map(item => (
-            <View key={item.category} style={styles.categoryRow}>
-              <Text style={styles.categoryName}>{item.category}</Text>
-              <Text style={[styles.categoryValue, type.number]}>
-                {formatCurrency(item.total)}
-              </Text>
-            </View>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>No expenses found for this date range.</Text>
-        )}
-      </SurfaceCard>
-
-      <SurfaceCard style={styles.pnlCard}>
-        <Text style={styles.cardTitle}>Profit and Loss</Text>
-        {pnlRows.map(row => (
-          <View key={row[0]} style={[styles.pnlRow, row[2] && styles.pnlHighlight]}>
-            <View style={styles.pnlLabelWrap}>
-              {row[3] === 'star' ? (
-                <Star color={COLORS.warning} size={17} fill={COLORS.warning} />
-              ) : null}
-              <Text style={[styles.pnlLabel, row[2] && styles.pnlLabelStrong]}>
-                {row[0]}
-              </Text>
-            </View>
-            <Text
-              style={[
-                styles.pnlValue,
-                type.number,
-                row[2] && styles.pnlValueStrong,
-              ]}>
-              {row[1]}
-            </Text>
-          </View>
-        ))}
-      </SurfaceCard>
+      {activeTab === 'sales' ? <SalesReport report={report} /> : null}
+      {activeTab === 'services' ? <ServicesReport report={report} /> : null}
+      {activeTab === 'combined' ? <CombinedReport report={report} /> : null}
     </ScrollView>
   );
 }
 
-function DateField({label, value, onChangeText, onBack, onForward}) {
+function SalesReport({report}) {
+  const paymentPie = [
+    {
+      name: 'Cash',
+      population: report.salesCash,
+      color: COLORS.success,
+      legendFontColor: COLORS.text,
+      legendFontSize: 12,
+    },
+    {
+      name: 'Bank',
+      population: report.salesBank,
+      color: COLORS.accent,
+      legendFontColor: COLORS.text,
+      legendFontSize: 12,
+    },
+  ];
+
   return (
-    <View style={styles.dateBlock}>
-      <Text style={styles.dateLabel}>{label}</Text>
-      <View style={styles.dateRow}>
-        <TouchableOpacity activeOpacity={0.84} onPress={onBack} style={styles.dateButton}>
-          <ChevronLeft color={COLORS.primary} size={18} />
-        </TouchableOpacity>
-        <TextInput
-          value={value}
-          onChangeText={onChangeText}
-          style={styles.dateInput}
-          placeholderTextColor={COLORS.muted}
+    <>
+      <HighlightCard label="Net Sales Profit" value={report.netSalesProfit} />
+      <ChartCard title="Daily Sales">
+        {report.dailySales.length > 0 && hasChartData(report.dailySales) ? (
+          <BarChart
+            data={toChartData(report.dailySales)}
+            width={chartWidth}
+            height={220}
+            chartConfig={chartConfig}
+            fromZero
+            showValuesOnTopOfBars
+            style={styles.chart}
+          />
+        ) : (
+          <Text style={styles.emptyText}>
+            No sales found for this date range.
+          </Text>
+        )}
+      </ChartCard>
+      <ChartCard title="Sales Payment Split">
+        {paymentPie.some(item => item.population > 0) ? (
+          <PieChart
+            data={paymentPie}
+            width={chartWidth}
+            height={220}
+            chartConfig={chartConfig}
+            accessor="population"
+            backgroundColor="transparent"
+            paddingLeft="8"
+            absolute
+          />
+        ) : (
+          <Text style={styles.emptyText}>No sales payment data to chart.</Text>
+        )}
+      </ChartCard>
+      <SummaryGrid
+        rows={[
+          ['Total Sales Revenue', report.salesRevenue],
+          ['Cash received from sales', report.salesCash],
+          ['Bank received from sales', report.salesBank],
+          ['Cost of goods sold', report.costOfGoodsSold],
+          ['Gross profit', report.grossProfit],
+          ['Allocated expenses', report.salesExpense],
+        ]}
+      />
+      <DetailCard title="Sales Extras">
+        <InfoRow
+          label="Best selling product"
+          value={report.bestSellingProduct}
         />
-        <TouchableOpacity activeOpacity={0.84} onPress={onForward} style={styles.dateButton}>
-          <ChevronRight color={COLORS.primary} size={18} />
-        </TouchableOpacity>
-      </View>
+        <InfoRow
+          label="Expense allocation"
+          value={
+            report.allocation === 'split'
+              ? `${report.salesPercent}% of expenses`
+              : 'All expenses'
+          }
+        />
+      </DetailCard>
+    </>
+  );
+}
+
+function ServicesReport({report}) {
+  const pieData = report.serviceTypeRevenue.map((item, index) => ({
+    name: item.service_type,
+    population: Number(item.total || 0),
+    color: [COLORS.success, COLORS.accent, COLORS.warning, COLORS.primary][
+      index % 4
+    ],
+    legendFontColor: COLORS.text,
+    legendFontSize: 12,
+  }));
+
+  return (
+    <>
+      <HighlightCard
+        label="Net Service Profit"
+        value={report.netServiceProfit}
+      />
+      <ChartCard title="Daily Service Revenue">
+        {report.dailyServices.length > 0 &&
+        hasChartData(report.dailyServices) ? (
+          <BarChart
+            data={toChartData(report.dailyServices)}
+            width={chartWidth}
+            height={220}
+            chartConfig={chartConfig}
+            fromZero
+            showValuesOnTopOfBars
+            style={styles.chart}
+          />
+        ) : (
+          <Text style={styles.emptyText}>
+            No service revenue in this date range.
+          </Text>
+        )}
+      </ChartCard>
+      <ChartCard title="Revenue by Service Type">
+        {pieData.length > 0 && pieData.some(item => item.population > 0) ? (
+          <PieChart
+            data={pieData}
+            width={chartWidth}
+            height={220}
+            chartConfig={chartConfig}
+            accessor="population"
+            backgroundColor="transparent"
+            paddingLeft="8"
+            absolute
+          />
+        ) : (
+          <Text style={styles.emptyText}>
+            No service type revenue to chart.
+          </Text>
+        )}
+      </ChartCard>
+      <SummaryGrid
+        rows={[
+          ['Total service revenue', report.serviceRevenue],
+          ['Cash received from services', report.serviceCash],
+          ['Bank received from services', report.serviceBank],
+          ['Allocated expenses', report.serviceExpense],
+        ]}
+      />
+      <DetailCard title="Service Highlights">
+        <InfoRow
+          label="Most popular service type"
+          value={report.mostPopularServiceType}
+        />
+        <InfoRow
+          label="Expense allocation"
+          value={
+            report.allocation === 'split'
+              ? `${report.servicesPercent}% of expenses`
+              : 'All expenses'
+          }
+        />
+      </DetailCard>
+      <ServiceTransactions transactions={report.serviceTransactions} />
+    </>
+  );
+}
+
+function CombinedReport({report}) {
+  const revenuePie = [
+    {
+      name: 'Sales',
+      population: report.salesRevenue,
+      color: COLORS.accent,
+      legendFontColor: COLORS.text,
+      legendFontSize: 12,
+    },
+    {
+      name: 'Services',
+      population: report.serviceRevenue,
+      color: COLORS.success,
+      legendFontColor: COLORS.text,
+      legendFontSize: 12,
+    },
+  ];
+
+  return (
+    <>
+      <HighlightCard label="Net Business Profit" value={report.netProfit} />
+      <ChartCard title="Profit Trend by Day">
+        {report.profitTrend.length > 0 && hasChartData(report.profitTrend) ? (
+          <BarChart
+            data={toChartData(report.profitTrend)}
+            width={chartWidth}
+            height={220}
+            chartConfig={chartConfig}
+            fromZero
+            showValuesOnTopOfBars
+            style={styles.chart}
+          />
+        ) : (
+          <Text style={styles.emptyText}>No profit trend data to chart.</Text>
+        )}
+      </ChartCard>
+      <ChartCard title="Revenue Split">
+        {revenuePie.some(item => item.population > 0) ? (
+          <PieChart
+            data={revenuePie}
+            width={chartWidth}
+            height={220}
+            chartConfig={chartConfig}
+            accessor="population"
+            backgroundColor="transparent"
+            paddingLeft="8"
+            absolute
+          />
+        ) : (
+          <Text style={styles.emptyText}>No revenue in this date range.</Text>
+        )}
+      </ChartCard>
+      <SummaryGrid
+        rows={[
+          ['Total Revenue', report.totalRevenue],
+          ['Total Cash received', report.totalCash],
+          ['Total Bank received', report.totalBank],
+          ['Total Expenses', report.totalExpenses],
+        ]}
+      />
+    </>
+  );
+}
+
+function ChartCard({title, children}) {
+  return (
+    <Card mode="outlined" style={styles.card}>
+      <Card.Content>
+        <Text style={styles.cardTitle}>{title}</Text>
+        {children}
+      </Card.Content>
+    </Card>
+  );
+}
+
+function DetailCard({title, children}) {
+  return (
+    <Card mode="outlined" style={styles.card}>
+      <Card.Content>
+        <Text style={styles.cardTitle}>{title}</Text>
+        {children}
+      </Card.Content>
+    </Card>
+  );
+}
+
+function ServiceTransactions({transactions}) {
+  return (
+    <Card mode="outlined" style={styles.card}>
+      <Card.Content>
+        <Text style={styles.cardTitle}>Service Transactions</Text>
+        {transactions.length > 0 ? (
+          transactions.map(item => (
+            <View key={item.id} style={styles.transactionRow}>
+              <View style={styles.transactionText}>
+                <Text style={styles.transactionTitle}>{item.service_type}</Text>
+                <Text style={styles.transactionMeta}>
+                  {item.payment_method === 'bank' ? 'Bank' : 'Cash'} |{' '}
+                  {format(parseISO(item.date), 'MMM d, p')}
+                </Text>
+              </View>
+              <Text style={styles.transactionAmount}>
+                {formatCurrency(item.amount)}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.emptyText}>No service transactions found.</Text>
+        )}
+      </Card.Content>
+    </Card>
+  );
+}
+
+function SummaryGrid({rows}) {
+  return (
+    <Card mode="outlined" style={styles.card}>
+      <Card.Content>
+        {rows.map(([label, value], index) => (
+          <View key={label}>
+            {index > 0 ? <Divider /> : null}
+            <InfoRow label={label} value={formatCurrency(value)} strong />
+          </View>
+        ))}
+      </Card.Content>
+    </Card>
+  );
+}
+
+function HighlightCard({label, value}) {
+  return (
+    <Card mode="contained" style={styles.highlightCard}>
+      <Card.Content>
+        <Text style={styles.highlightLabel}>{label}</Text>
+        <Text style={styles.highlightValue}>{formatCurrency(value)}</Text>
+      </Card.Content>
+    </Card>
+  );
+}
+
+function InfoRow({label, value, strong}) {
+  return (
+    <View style={styles.infoRow}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={[styles.infoValue, strong && styles.infoValueStrong]}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -378,191 +768,150 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     width: '100%',
   },
-  filterCard: {
-    gap: 10,
+  header: {
+    paddingBottom: 16,
+    paddingTop: 30,
+  },
+  eyebrow: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  title: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 30,
+    fontWeight: '800',
+    lineHeight: 38,
+  },
+  subtitle: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   cardTitle: {
     color: COLORS.text,
     fontFamily: FONT_FAMILY,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
-    marginBottom: 6,
-  },
-  dateBlock: {
-    gap: 5,
-  },
-  dateLabel: {
-    color: COLORS.muted,
-    fontFamily: FONT_FAMILY,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    marginBottom: 10,
   },
   dateRow: {
-    alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
-  },
-  dateButton: {
-    alignItems: 'center',
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: 16,
-    height: 44,
-    justifyContent: 'center',
-    width: 42,
+    gap: 10,
   },
   dateInput: {
-    backgroundColor: COLORS.background,
-    borderColor: COLORS.line,
-    borderRadius: 18,
-    borderWidth: 1,
-    color: COLORS.text,
+    backgroundColor: COLORS.surface,
+    flex: 1,
+  },
+  applyButton: {
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  tabs: {
+    marginBottom: 16,
+  },
+  infoRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    minHeight: 48,
+  },
+  infoLabel: {
+    color: COLORS.muted,
     flex: 1,
     fontFamily: FONT_FAMILY,
-    minHeight: 48,
-    paddingHorizontal: 14,
+    fontWeight: '700',
+  },
+  infoValue: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  infoValueStrong: {
+    color: COLORS.primary,
+  },
+  highlightCard: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  highlightLabel: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  highlightValue: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 28,
+    fontWeight: '800',
+    marginTop: 6,
+  },
+  chart: {
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  transactionRow: {
+    alignItems: 'center',
+    borderTopColor: COLORS.line,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  transactionText: {
+    flex: 1,
+  },
+  transactionTitle: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
+  },
+  transactionMeta: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  transactionAmount: {
+    color: COLORS.success,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
+  },
+  emptyText: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    lineHeight: 20,
+    paddingVertical: 14,
+    textAlign: 'center',
   },
   errorText: {
     color: COLORS.danger,
     fontFamily: FONT_FAMILY,
     fontSize: 12,
-  },
-  profitHero: {
-    marginTop: 16,
-  },
-  heroRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  heroEyebrow: {
-    color: COLORS.primaryForeground,
-    fontFamily: FONT_FAMILY,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-  },
-  profitAmount: {
-    color: COLORS.primaryForeground,
-    fontSize: 36,
-    marginTop: 12,
-  },
-  glassRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
-  },
-  glassTile: {
-    backgroundColor: COLORS.glass,
-    borderRadius: 18,
-    flex: 1,
-    padding: 12,
-  },
-  glassLabel: {
-    color: COLORS.primaryForeground,
-    fontFamily: FONT_FAMILY,
-    fontSize: 11,
-    fontWeight: '700',
-    opacity: 0.82,
-  },
-  glassValue: {
-    color: COLORS.primaryForeground,
-    fontSize: 15,
-    marginTop: 4,
-  },
-  chartCard: {
-    marginTop: 16,
-  },
-  barChart: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    gap: 10,
-    height: 178,
-    justifyContent: 'space-between',
-    paddingTop: 18,
-  },
-  barItem: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  bar: {
-    borderRadius: 999,
-    width: '70%',
-  },
-  barSoft: {
-    backgroundColor: COLORS.primarySoft,
-  },
-  barLabel: {
-    color: COLORS.muted,
-    fontFamily: FONT_FAMILY,
-    fontSize: 11,
-    fontWeight: '800',
     marginTop: 8,
-  },
-  categoryRow: {
-    alignItems: 'center',
-    borderTopColor: COLORS.line,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-  },
-  categoryName: {
-    color: COLORS.text,
-    fontFamily: FONT_FAMILY,
-    fontWeight: '800',
-  },
-  categoryValue: {
-    color: COLORS.danger,
-    fontSize: 14,
-  },
-  emptyText: {
-    color: COLORS.muted,
-    fontFamily: FONT_FAMILY,
-    paddingVertical: 12,
-    textAlign: 'center',
-  },
-  pnlCard: {
-    marginTop: 16,
-  },
-  pnlRow: {
-    alignItems: 'center',
-    borderTopColor: COLORS.line,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 52,
-    gap: 10,
-  },
-  pnlHighlight: {
-    minHeight: 62,
-  },
-  pnlLabelWrap: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  pnlLabel: {
-    color: COLORS.muted,
-    fontFamily: FONT_FAMILY,
-    fontWeight: '700',
-  },
-  pnlLabelStrong: {
-    color: COLORS.primary,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  pnlValue: {
-    color: COLORS.text,
-    fontSize: 14,
-    textAlign: 'right',
-  },
-  pnlValueStrong: {
-    color: COLORS.primary,
-    fontSize: 19,
   },
 });
 

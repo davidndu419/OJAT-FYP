@@ -2,7 +2,6 @@ const jwt = require('jsonwebtoken');
 
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization || '';
-  console.log('[AuthMiddleware] Incoming Authorization header:', authHeader);
 
   if (!process.env.JWT_SECRET) {
     console.error('[AuthMiddleware] JWT_SECRET is not defined');
