@@ -1,0 +1,482 @@
+﻿> Task :gradle-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:inspectClassesForKotlinIC UP-TO-DATE
+> Task :app:buildCodegenCLI SKIPPED
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :app:generatePackageList
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :react-native-async-storage_async-storage:preBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preDebugBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugAidl NO-SOURCE
+> Task :react-native-community_netinfo:preBuild UP-TO-DATE
+> Task :react-native-community_netinfo:preDebugBuild UP-TO-DATE
+> Task :react-native-community_netinfo:compileDebugAidl NO-SOURCE
+> Task :react-native-file-viewer:preBuild UP-TO-DATE
+> Task :react-native-file-viewer:preDebugBuild UP-TO-DATE
+> Task :react-native-file-viewer:compileDebugAidl NO-SOURCE
+> Task :react-native-google-signin_google-signin:preBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:preDebugBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugAidl NO-SOURCE
+> Task :react-native-html-to-pdf:buildCodegenCLI SKIPPED
+> Task :react-native-html-to-pdf:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-html-to-pdf:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-html-to-pdf:preBuild UP-TO-DATE
+> Task :react-native-html-to-pdf:preDebugBuild UP-TO-DATE
+> Task :react-native-html-to-pdf:compileDebugAidl NO-SOURCE
+> Task :react-native-safe-area-context:preBuild UP-TO-DATE
+> Task :react-native-safe-area-context:preDebugBuild UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugAidl NO-SOURCE
+> Task :react-native-screens:preBuild UP-TO-DATE
+> Task :react-native-screens:preDebugBuild UP-TO-DATE
+> Task :react-native-screens:compileDebugAidl NO-SOURCE
+> Task :react-native-sqlite-storage:preBuild UP-TO-DATE
+> Task :react-native-sqlite-storage:preDebugBuild UP-TO-DATE
+> Task :react-native-sqlite-storage:compileDebugAidl NO-SOURCE
+> Task :react-native-svg:preBuild UP-TO-DATE
+> Task :react-native-svg:preDebugBuild UP-TO-DATE
+> Task :react-native-svg:compileDebugAidl NO-SOURCE
+> Task :react-native-vector-icons:preBuild UP-TO-DATE
+> Task :react-native-vector-icons:preDebugBuild UP-TO-DATE
+> Task :react-native-vector-icons:compileDebugAidl NO-SOURCE
+> Task :app:compileDebugAidl NO-SOURCE
+> Task :react-native-async-storage_async-storage:packageDebugRenderscript NO-SOURCE
+> Task :react-native-community_netinfo:packageDebugRenderscript NO-SOURCE
+> Task :react-native-file-viewer:packageDebugRenderscript NO-SOURCE
+> Task :react-native-google-signin_google-signin:packageDebugRenderscript NO-SOURCE
+> Task :react-native-html-to-pdf:packageDebugRenderscript NO-SOURCE
+> Task :react-native-safe-area-context:packageDebugRenderscript NO-SOURCE
+> Task :react-native-screens:packageDebugRenderscript NO-SOURCE
+> Task :react-native-sqlite-storage:packageDebugRenderscript NO-SOURCE
+> Task :react-native-svg:packageDebugRenderscript NO-SOURCE
+> Task :react-native-vector-icons:packageDebugRenderscript NO-SOURCE
+> Task :app:compileDebugRenderscript NO-SOURCE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-community_netinfo:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-file-viewer:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-google-signin_google-signin:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-html-to-pdf:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-safe-area-context:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-screens:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-sqlite-storage:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-svg:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-vector-icons:writeDebugAarMetadata UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugRenderscript NO-SOURCE
+> Task :react-native-async-storage_async-storage:generateDebugResValues UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:packageDebugResources UP-TO-DATE
+> Task :react-native-community_netinfo:compileDebugRenderscript NO-SOURCE
+> Task :react-native-community_netinfo:generateDebugResValues UP-TO-DATE
+> Task :react-native-community_netinfo:generateDebugResources UP-TO-DATE
+> Task :react-native-community_netinfo:packageDebugResources UP-TO-DATE
+> Task :react-native-file-viewer:compileDebugRenderscript NO-SOURCE
+> Task :react-native-file-viewer:generateDebugResValues UP-TO-DATE
+> Task :react-native-file-viewer:generateDebugResources UP-TO-DATE
+> Task :react-native-file-viewer:packageDebugResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugRenderscript NO-SOURCE
+> Task :react-native-google-signin_google-signin:generateDebugResValues UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:packageDebugResources UP-TO-DATE
+> Task :react-native-html-to-pdf:compileDebugRenderscript NO-SOURCE
+> Task :react-native-html-to-pdf:generateDebugResValues UP-TO-DATE
+> Task :react-native-html-to-pdf:generateDebugResources UP-TO-DATE
+> Task :react-native-html-to-pdf:packageDebugResources UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugRenderscript NO-SOURCE
+> Task :react-native-safe-area-context:generateDebugResValues UP-TO-DATE
+> Task :react-native-safe-area-context:generateDebugResources UP-TO-DATE
+> Task :react-native-safe-area-context:packageDebugResources UP-TO-DATE
+> Task :react-native-screens:compileDebugRenderscript NO-SOURCE
+> Task :react-native-screens:generateDebugResValues UP-TO-DATE
+> Task :react-native-screens:generateDebugResources UP-TO-DATE
+> Task :react-native-screens:packageDebugResources UP-TO-DATE
+> Task :react-native-sqlite-storage:compileDebugRenderscript NO-SOURCE
+> Task :react-native-sqlite-storage:generateDebugResValues UP-TO-DATE
+> Task :react-native-sqlite-storage:generateDebugResources UP-TO-DATE
+> Task :react-native-sqlite-storage:packageDebugResources UP-TO-DATE
+> Task :react-native-svg:compileDebugRenderscript NO-SOURCE
+> Task :react-native-svg:generateDebugResValues UP-TO-DATE
+> Task :react-native-svg:generateDebugResources UP-TO-DATE
+> Task :react-native-svg:packageDebugResources UP-TO-DATE
+> Task :react-native-vector-icons:compileDebugRenderscript NO-SOURCE
+> Task :react-native-vector-icons:generateDebugResValues UP-TO-DATE
+> Task :react-native-vector-icons:generateDebugResources UP-TO-DATE
+> Task :react-native-vector-icons:packageDebugResources UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:processDebugManifest UP-TO-DATE
+> Task :react-native-community_netinfo:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-community_netinfo:processDebugManifest UP-TO-DATE
+> Task :react-native-file-viewer:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-file-viewer:processDebugManifest UP-TO-DATE
+> Task :react-native-google-signin_google-signin:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:processDebugManifest UP-TO-DATE
+> Task :react-native-html-to-pdf:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-html-to-pdf:processDebugManifest UP-TO-DATE
+> Task :react-native-safe-area-context:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-safe-area-context:processDebugManifest UP-TO-DATE
+> Task :react-native-screens:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-screens:processDebugManifest UP-TO-DATE
+> Task :react-native-sqlite-storage:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-sqlite-storage:processDebugManifest UP-TO-DATE
+> Task :react-native-svg:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-svg:processDebugManifest UP-TO-DATE
+> Task :react-native-vector-icons:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-vector-icons:processDebugManifest UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugRFile UP-TO-DATE
+> Task :react-native-community_netinfo:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-community_netinfo:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-community_netinfo:generateDebugRFile UP-TO-DATE
+> Task :react-native-file-viewer:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-file-viewer:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-file-viewer:generateDebugRFile UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugRFile UP-TO-DATE
+> Task :react-native-html-to-pdf:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-html-to-pdf:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-html-to-pdf:generateDebugRFile UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-safe-area-context:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-safe-area-context:generateDebugRFile UP-TO-DATE
+> Task :react-native-screens:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-screens:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-screens:generateDebugRFile UP-TO-DATE
+> Task :react-native-sqlite-storage:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-sqlite-storage:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-sqlite-storage:generateDebugRFile UP-TO-DATE
+> Task :react-native-svg:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-svg:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-svg:generateDebugRFile UP-TO-DATE
+> Task :react-native-vector-icons:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-vector-icons:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-vector-icons:generateDebugRFile UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-async-storage_async-storage:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-async-storage_async-storage:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-community_netinfo:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-community_netinfo:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-community_netinfo:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-community_netinfo:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-file-viewer:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-file-viewer:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-file-viewer:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-file-viewer:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugKotlin UP-TO-DATE
+> Task :react-native-google-signin_google-signin:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-google-signin_google-signin:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-html-to-pdf:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-html-to-pdf:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-safe-area-context:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugKotlin UP-TO-DATE
+> Task :react-native-safe-area-context:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-safe-area-context:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-screens:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-screens:compileDebugKotlin UP-TO-DATE
+> Task :react-native-screens:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-screens:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-screens:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-sqlite-storage:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-sqlite-storage:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-sqlite-storage:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-sqlite-storage:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-svg:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-svg:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-svg:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-svg:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-vector-icons:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-vector-icons:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-vector-icons:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-vector-icons:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:copyReactNativeVectorIconFonts UP-TO-DATE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeDebugShaders UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugShaders NO-SOURCE
+> Task :react-native-async-storage_async-storage:generateDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:packageDebugAssets UP-TO-DATE
+> Task :react-native-community_netinfo:mergeDebugShaders UP-TO-DATE
+> Task :react-native-community_netinfo:compileDebugShaders NO-SOURCE
+> Task :react-native-community_netinfo:generateDebugAssets UP-TO-DATE
+> Task :react-native-community_netinfo:packageDebugAssets UP-TO-DATE
+> Task :react-native-file-viewer:mergeDebugShaders UP-TO-DATE
+> Task :react-native-file-viewer:compileDebugShaders NO-SOURCE
+> Task :react-native-file-viewer:generateDebugAssets UP-TO-DATE
+> Task :react-native-file-viewer:packageDebugAssets UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeDebugShaders UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugShaders NO-SOURCE
+> Task :react-native-google-signin_google-signin:generateDebugAssets UP-TO-DATE
+> Task :react-native-google-signin_google-signin:packageDebugAssets UP-TO-DATE
+> Task :react-native-html-to-pdf:mergeDebugShaders UP-TO-DATE
+> Task :react-native-html-to-pdf:compileDebugShaders NO-SOURCE
+> Task :react-native-html-to-pdf:generateDebugAssets UP-TO-DATE
+> Task :react-native-html-to-pdf:packageDebugAssets UP-TO-DATE
+> Task :react-native-safe-area-context:mergeDebugShaders UP-TO-DATE
+> Task :react-native-safe-area-context:compileDebugShaders NO-SOURCE
+> Task :react-native-safe-area-context:generateDebugAssets UP-TO-DATE
+> Task :react-native-safe-area-context:packageDebugAssets UP-TO-DATE
+> Task :react-native-screens:mergeDebugShaders UP-TO-DATE
+> Task :react-native-screens:compileDebugShaders NO-SOURCE
+> Task :react-native-screens:generateDebugAssets UP-TO-DATE
+> Task :react-native-screens:packageDebugAssets UP-TO-DATE
+> Task :react-native-sqlite-storage:mergeDebugShaders UP-TO-DATE
+> Task :react-native-sqlite-storage:compileDebugShaders NO-SOURCE
+> Task :react-native-sqlite-storage:generateDebugAssets UP-TO-DATE
+> Task :react-native-sqlite-storage:packageDebugAssets UP-TO-DATE
+> Task :react-native-svg:mergeDebugShaders UP-TO-DATE
+> Task :react-native-svg:compileDebugShaders NO-SOURCE
+> Task :react-native-svg:generateDebugAssets UP-TO-DATE
+> Task :react-native-svg:packageDebugAssets UP-TO-DATE
+> Task :react-native-vector-icons:mergeDebugShaders UP-TO-DATE
+> Task :react-native-vector-icons:compileDebugShaders NO-SOURCE
+> Task :react-native-vector-icons:generateDebugAssets UP-TO-DATE
+> Task :react-native-vector-icons:packageDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:processDebugJavaRes NO-SOURCE
+> Task :react-native-async-storage_async-storage:processDebugJavaRes NO-SOURCE
+> Task :react-native-async-storage_async-storage:bundleLibResDebug NO-SOURCE
+> Task :react-native-community_netinfo:processDebugJavaRes NO-SOURCE
+> Task :react-native-community_netinfo:bundleLibResDebug NO-SOURCE
+> Task :react-native-file-viewer:processDebugJavaRes NO-SOURCE
+> Task :react-native-file-viewer:bundleLibResDebug NO-SOURCE
+> Task :react-native-google-signin_google-signin:processDebugJavaRes NO-SOURCE
+> Task :react-native-google-signin_google-signin:bundleLibResDebug UP-TO-DATE
+> Task :react-native-html-to-pdf:processDebugJavaRes NO-SOURCE
+> Task :react-native-safe-area-context:processDebugJavaRes NO-SOURCE
+> Task :react-native-safe-area-context:bundleLibResDebug UP-TO-DATE
+> Task :react-native-screens:processDebugJavaRes NO-SOURCE
+> Task :react-native-screens:bundleLibResDebug UP-TO-DATE
+> Task :react-native-sqlite-storage:processDebugJavaRes NO-SOURCE
+> Task :react-native-sqlite-storage:bundleLibResDebug NO-SOURCE
+> Task :react-native-svg:processDebugJavaRes NO-SOURCE
+> Task :react-native-svg:bundleLibResDebug NO-SOURCE
+> Task :react-native-vector-icons:processDebugJavaRes NO-SOURCE
+> Task :react-native-vector-icons:bundleLibResDebug NO-SOURCE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+
+> Task :react-native-html-to-pdf:compileDebugKotlin
+'compileDebugJavaWithJavac' task (current target is 11) and 'compileDebugKotlin' task (current target is 1.8) jvm target compatibility should be set to the same Java version.
+
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-community_netinfo:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-file-viewer:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-safe-area-context:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-screens:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-vector-icons:bundleLibRuntimeToJarDebug
+> Task :react-native-sqlite-storage:bundleLibRuntimeToJarDebug
+> Task :app:mergeDebugJniLibFolders
+> Task :react-native-async-storage_async-storage:mergeDebugJniLibFolders
+> Task :react-native-async-storage_async-storage:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-svg:bundleLibRuntimeToJarDebug
+> Task :react-native-community_netinfo:mergeDebugJniLibFolders
+> Task :react-native-community_netinfo:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-file-viewer:mergeDebugJniLibFolders
+> Task :react-native-async-storage_async-storage:copyDebugJniLibsProjectOnly
+> Task :react-native-community_netinfo:copyDebugJniLibsProjectOnly
+> Task :react-native-file-viewer:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-file-viewer:copyDebugJniLibsProjectOnly
+> Task :react-native-google-signin_google-signin:mergeDebugJniLibFolders
+> Task :react-native-google-signin_google-signin:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-google-signin_google-signin:copyDebugJniLibsProjectOnly
+> Task :react-native-html-to-pdf:mergeDebugJniLibFolders
+> Task :react-native-html-to-pdf:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-html-to-pdf:copyDebugJniLibsProjectOnly
+> Task :react-native-safe-area-context:mergeDebugJniLibFolders
+> Task :react-native-safe-area-context:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-safe-area-context:copyDebugJniLibsProjectOnly
+
+> Task :react-native-html-to-pdf:compileDebugKotlin
+w: C:\devworks\finalyear project\OfflineFinanceApp\node_modules\react-native-html-to-pdf\android\src\main\java\android\print\PdfConverter.kt: (66, 59): 'createPrintDocumentAdapter(): PrintDocumentAdapter!' is deprecated. Deprecated in Java
+w: C:\devworks\finalyear project\OfflineFinanceApp\node_modules\react-native-html-to-pdf\android\src\main\java\android\print\PdfConverter.kt: (146, 38): This declaration overrides deprecated member but not marked as deprecated itself. This deprecation won't be inherited in future releases. Please add @Deprecated annotation or suppress. See https://youtrack.jetbrains.com/issue/KT-47902 for details
+w: C:\devworks\finalyear project\OfflineFinanceApp\node_modules\react-native-html-to-pdf\android\src\main\java\com\htmltopdf\HtmlToPdfModule.kt: (81, 66): Type mismatch: inferred type is String? but String was expected
+w: C:\devworks\finalyear project\OfflineFinanceApp\node_modules\react-native-html-to-pdf\android\src\main\java\com\htmltopdf\HtmlToPdfModule.kt: (83, 49): Type mismatch: inferred type is String? but String was expected
+
+> Task :react-native-screens:configureCMakeDebug[arm64-v8a]
+> Task :react-native-html-to-pdf:compileDebugJavaWithJavac
+> Task :react-native-html-to-pdf:bundleLibCompileToJarDebug
+> Task :react-native-html-to-pdf:bundleLibResDebug
+> Task :react-native-html-to-pdf:bundleLibRuntimeToJarDebug
+> Task :react-native-screens:buildCMakeDebug[arm64-v8a]
+> Task :app:compileDebugJavaWithJavac
+> Task :app:mergeLibDexDebug
+> Task :app:dexBuilderDebug
+> Task :react-native-screens:externalNativeBuildDebug
+> Task :react-native-screens:mergeDebugJniLibFolders
+> Task :react-native-sqlite-storage:mergeDebugJniLibFolders
+> Task :react-native-sqlite-storage:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-sqlite-storage:copyDebugJniLibsProjectOnly
+> Task :react-native-screens:mergeDebugNativeLibs
+> Task :react-native-svg:mergeDebugJniLibFolders
+> Task :react-native-svg:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-svg:copyDebugJniLibsProjectOnly
+> Task :react-native-screens:copyDebugJniLibsProjectOnly
+> Task :react-native-vector-icons:mergeDebugJniLibFolders
+> Task :react-native-vector-icons:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-vector-icons:copyDebugJniLibsProjectOnly
+> Task :app:validateSigningDebug
+> Task :app:mergeProjectDexDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+> Task :react-native-async-storage_async-storage:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-async-storage_async-storage:copyDebugJniLibsProjectAndLocalJars
+> Task :app:mergeDebugNativeLibs
+> Task :app:mergeDebugJavaResource
+> Task :react-native-async-storage_async-storage:extractDebugAnnotations
+> Task :react-native-async-storage_async-storage:extractDeepLinksForAarDebug
+> Task :react-native-async-storage_async-storage:mergeDebugGeneratedProguardFiles
+> Task :react-native-async-storage_async-storage:mergeDebugConsumerProguardFiles
+> Task :react-native-async-storage_async-storage:prepareDebugArtProfile
+> Task :react-native-community_netinfo:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-async-storage_async-storage:prepareLintJarForPublish
+> Task :react-native-community_netinfo:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-async-storage_async-storage:mergeDebugJavaResource
+> Task :react-native-community_netinfo:extractDebugAnnotations
+> Task :react-native-async-storage_async-storage:syncDebugLibJars
+> Task :react-native-async-storage_async-storage:bundleDebugAar
+> Task :react-native-async-storage_async-storage:assembleDebug
+> Task :react-native-community_netinfo:extractDeepLinksForAarDebug
+> Task :react-native-community_netinfo:mergeDebugGeneratedProguardFiles
+> Task :react-native-community_netinfo:mergeDebugConsumerProguardFiles
+> Task :react-native-community_netinfo:prepareDebugArtProfile
+> Task :app:stripDebugDebugSymbols
+> Task :react-native-community_netinfo:prepareLintJarForPublish
+> Task :react-native-file-viewer:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-community_netinfo:mergeDebugJavaResource
+> Task :react-native-file-viewer:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-community_netinfo:syncDebugLibJars
+> Task :react-native-community_netinfo:bundleDebugAar
+> Task :react-native-community_netinfo:assembleDebug
+> Task :react-native-file-viewer:extractDebugAnnotations
+> Task :react-native-file-viewer:extractDeepLinksForAarDebug
+> Task :react-native-file-viewer:mergeDebugGeneratedProguardFiles
+> Task :react-native-file-viewer:mergeDebugConsumerProguardFiles
+> Task :react-native-file-viewer:prepareDebugArtProfile
+> Task :react-native-file-viewer:prepareLintJarForPublish
+> Task :react-native-google-signin_google-signin:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-google-signin_google-signin:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-file-viewer:mergeDebugJavaResource
+> Task :react-native-google-signin_google-signin:extractDebugAnnotations
+> Task :react-native-file-viewer:syncDebugLibJars
+> Task :react-native-file-viewer:bundleDebugAar
+> Task :react-native-file-viewer:assembleDebug
+> Task :react-native-google-signin_google-signin:extractDeepLinksForAarDebug
+> Task :react-native-google-signin_google-signin:mergeDebugGeneratedProguardFiles
+> Task :react-native-google-signin_google-signin:mergeDebugConsumerProguardFiles
+> Task :react-native-google-signin_google-signin:prepareDebugArtProfile
+> Task :react-native-google-signin_google-signin:prepareLintJarForPublish
+> Task :react-native-html-to-pdf:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-html-to-pdf:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-html-to-pdf:extractDebugAnnotations
+> Task :react-native-google-signin_google-signin:mergeDebugJavaResource
+> Task :react-native-html-to-pdf:extractDeepLinksForAarDebug
+> Task :react-native-google-signin_google-signin:syncDebugLibJars
+> Task :react-native-google-signin_google-signin:bundleDebugAar
+> Task :react-native-google-signin_google-signin:assembleDebug
+> Task :react-native-html-to-pdf:mergeDebugGeneratedProguardFiles
+> Task :react-native-html-to-pdf:mergeDebugConsumerProguardFiles
+> Task :react-native-html-to-pdf:prepareDebugArtProfile
+> Task :react-native-html-to-pdf:prepareLintJarForPublish
+> Task :react-native-safe-area-context:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-safe-area-context:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-html-to-pdf:mergeDebugJavaResource
+> Task :react-native-safe-area-context:extractDebugAnnotations
+> Task :react-native-html-to-pdf:syncDebugLibJars
+> Task :react-native-html-to-pdf:bundleDebugAar
+> Task :react-native-html-to-pdf:assembleDebug
+> Task :react-native-safe-area-context:extractDeepLinksForAarDebug
+> Task :react-native-safe-area-context:mergeDebugGeneratedProguardFiles
+> Task :react-native-safe-area-context:mergeDebugConsumerProguardFiles
+> Task :react-native-safe-area-context:prepareDebugArtProfile
+> Task :react-native-safe-area-context:prepareLintJarForPublish
+> Task :react-native-screens:extractDebugAnnotations
+> Task :react-native-safe-area-context:mergeDebugJavaResource
+> Task :react-native-screens:extractDeepLinksForAarDebug
+> Task :react-native-screens:stripDebugDebugSymbols
+> Task :react-native-safe-area-context:syncDebugLibJars
+> Task :react-native-safe-area-context:bundleDebugAar
+> Task :react-native-safe-area-context:assembleDebug
+> Task :react-native-screens:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-screens:mergeDebugGeneratedProguardFiles
+> Task :react-native-screens:mergeDebugConsumerProguardFiles
+> Task :react-native-screens:prepareDebugArtProfile
+> Task :react-native-screens:prepareLintJarForPublish
+> Task :react-native-sqlite-storage:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-sqlite-storage:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-screens:mergeDebugJavaResource
+> Task :react-native-sqlite-storage:extractDebugAnnotations
+> Task :react-native-screens:syncDebugLibJars
+> Task :react-native-screens:bundleDebugAar
+> Task :react-native-screens:assembleDebug
+> Task :react-native-sqlite-storage:extractDeepLinksForAarDebug
+> Task :react-native-sqlite-storage:mergeDebugGeneratedProguardFiles
+> Task :react-native-sqlite-storage:mergeDebugConsumerProguardFiles
+> Task :react-native-sqlite-storage:prepareDebugArtProfile
+> Task :react-native-sqlite-storage:prepareLintJarForPublish
+> Task :react-native-svg:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-sqlite-storage:mergeDebugJavaResource
+> Task :react-native-svg:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-sqlite-storage:syncDebugLibJars
+> Task :react-native-sqlite-storage:bundleDebugAar
+> Task :react-native-sqlite-storage:assembleDebug
+> Task :react-native-svg:extractDebugAnnotations
+> Task :react-native-svg:extractDeepLinksForAarDebug
+> Task :react-native-svg:mergeDebugGeneratedProguardFiles
+> Task :react-native-svg:mergeDebugConsumerProguardFiles
+> Task :react-native-svg:prepareDebugArtProfile
+> Task :react-native-svg:prepareLintJarForPublish
+> Task :react-native-vector-icons:stripDebugDebugSymbols NO-SOURCE
+> Task :react-native-svg:mergeDebugJavaResource
+> Task :react-native-vector-icons:copyDebugJniLibsProjectAndLocalJars
+> Task :react-native-vector-icons:extractDebugAnnotations
+> Task :react-native-svg:syncDebugLibJars
+> Task :react-native-svg:bundleDebugAar
+> Task :react-native-svg:assembleDebug
+> Task :react-native-vector-icons:extractDeepLinksForAarDebug
+> Task :react-native-vector-icons:mergeDebugGeneratedProguardFiles
+> Task :react-native-vector-icons:mergeDebugConsumerProguardFiles
+> Task :react-native-vector-icons:prepareDebugArtProfile
+> Task :react-native-vector-icons:prepareLintJarForPublish
+> Task :react-native-vector-icons:mergeDebugJavaResource
+> Task :react-native-vector-icons:syncDebugLibJars
+> Task :react-native-vector-icons:bundleDebugAar
+> Task :react-native-vector-icons:assembleDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 8.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+See https://docs.gradle.org/7.5.1/userguide/command_line_interface.html#sec:command_line_warnings
+
+BUILD SUCCESSFUL in 4m 32s
+323 actionable tasks: 147 executed, 176 up-to-date

@@ -15,7 +15,7 @@ const createInitialState = () => ({
     {key: 'expense_allocation', value: 'combined'},
     {key: 'sales_expense_percent', value: '60'},
     {key: 'services_expense_percent', value: '40'},
-    {key: 'business_name', value: 'TradeEase Business'},
+    {key: 'business_name', value: 'OJAT Business'},
     {key: 'business_tin', value: 'Not provided'},
   ],
 });

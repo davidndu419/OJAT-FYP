@@ -152,7 +152,7 @@ export const initDatabase = async () => {
   );
   await db.executeSql(
     'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?);',
-    ['business_name', 'TradeEase Business'],
+    ['business_name', 'OJAT Business'],
   );
   await db.executeSql(
     'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?);',

@@ -209,7 +209,7 @@ function TransactionHistoryScreen({navigation}) {
   const [exportTo, setExportTo] = useState(initialCustomRange.to);
   const [transactions, setTransactions] = useState([]);
   const [business, setBusiness] = useState({
-    name: 'TradeEase Business',
+    name: 'OJAT Business',
     tin: 'Not provided',
   });
   const [periodLabel, setPeriodLabel] = useState('This Month');
@@ -321,7 +321,7 @@ function TransactionHistoryScreen({navigation}) {
 
       setTransactions([...saleRows, ...serviceRows, ...expenseRows]);
       setBusiness({
-        name: businessName || 'TradeEase Business',
+        name: businessName || 'OJAT Business',
         tin: businessTin || 'Not provided',
       });
       setPeriodLabel(range.label);

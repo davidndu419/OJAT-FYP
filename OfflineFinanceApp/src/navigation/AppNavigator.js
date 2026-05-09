@@ -173,7 +173,7 @@ function KoboTabBar({state, descriptors, navigation}) {
 }
 
 function AppNavigator() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [appState, setAppState] = useState({ isLoading: true, isOnboardingComplete: null });
   const dispatch = useDispatch();
   const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
 
@@ -182,6 +182,7 @@ function AppNavigator() {
       try {
         const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
         const storedUser = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+        const onboardingStatus = await AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_COMPLETE);
 
         if (token) {
           dispatch(
@@ -191,16 +192,28 @@ function AppNavigator() {
             }),
           );
         }
+
+        setAppState({
+          isLoading: false,
+          isOnboardingComplete: onboardingStatus === 'true'
+        });
       } catch (error) {
-      } finally {
-        setIsLoading(false);
+        setAppState({ isLoading: false, isOnboardingComplete: null });
       }
     };
 
     checkAuthToken();
   }, [dispatch]);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isAuthenticated) {
+      AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_COMPLETE).then(status => {
+        setAppState(prev => ({ ...prev, isOnboardingComplete: status === 'true' }));
+      });
+    }
+  }, [isAuthenticated]);
+
+  if (appState.isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -219,7 +232,7 @@ function AppNavigator() {
           />
         </Stack.Navigator>
       ) : (
-        <AuthNavigator />
+        <AuthNavigator initialRouteName={appState.isOnboardingComplete ? 'Landing' : 'Onboarding'} />
       )}
     </NavigationContainer>
   );

@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -240,17 +241,19 @@ function LoginScreen({navigation, route}) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled">
         <View style={styles.brandRow}>
-          <IconBubble gradient size={42}>
-            <Sparkles color={COLORS.primaryForeground} size={19} />
-          </IconBubble>
-          <Text style={styles.wordmark}>TradeEase</Text>
+          <Image 
+            source={require('../../assets/images/app_icon.png')} 
+            style={{width: 42, height: 42}} 
+            resizeMode="contain" 
+          />
+          <Text style={styles.wordmark}>OJAT</Text>
         </View>
 
         <HeroCard style={styles.hero}>
           <Text style={styles.heroEyebrow}>WELCOME BACK</Text>
-          <Text style={styles.heroTitle}>Sign in to TradeEase</Text>
+          <Text style={styles.heroTitle}>Sign in to OJAT</Text>
           <Text style={styles.heroSubtitle}>
-            Manage sales, expenses, and inventory even when the internet takes a break.
+            Premium offline-first sales, inventory, expenses, reports, and cloud sync for modern businesses.
           </Text>
         </HeroCard>
 

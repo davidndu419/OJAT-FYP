@@ -54,6 +54,8 @@ import {
   YAxis,
 } from 'recharts';
 import './tradeease.css';
+import appIcon from '../assets/images/app_icon.png';
+import fullLogo from '../assets/images/full_logo.png';
 
 const NAIRA = String.fromCharCode(8358);
 
@@ -541,7 +543,7 @@ function TradeEaseApp() {
   const [servicesExpensePercent, setServicesExpensePercent] = useLocalStorageState('te_servicesExpensePercent', 40);
   const [userName] = useState('testing18');
   const [business, setBusiness] = useLocalStorageState('te_business', {
-    name: 'TradeEase Store',
+    name: 'OJAT Store',
     taxId: 'TIN-2480-TE',
     receiptPrefix: 'TE',
   });
@@ -671,12 +673,16 @@ function BottomNavigation({activeScreen, onNavigate}) {
   );
 }
 
-function ScreenHeader({eyebrow, title, action}) {
+function ScreenHeader({eyebrow, title, action, isDashboard}) {
   return (
     <header className="screen-header">
       <div className="header-copy">
         <p>{eyebrow}</p>
-        <h1>{title}</h1>
+        {isDashboard ? (
+          <img src={fullLogo} alt="OJAT Logo" style={{ height: 32, marginTop: 4, objectFit: 'contain' }} />
+        ) : (
+          <h1>{title}</h1>
+        )}
       </div>
       {action}
     </header>
@@ -807,6 +813,7 @@ function Dashboard({
       <ScreenHeader
         eyebrow={`${greeting}, ${userName}`}
         title="Dashboard"
+        isDashboard={true}
         action={
           <div className="header-actions">
             <button
@@ -3128,7 +3135,7 @@ function downloadStatementPdf({
   doc.setTextColor('#1f3a5f');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.text(business.name || 'TradeEase Business', 16, y);
+  doc.text(business.name || 'OJAT Business', 16, y);
   doc.setFontSize(10);
   doc.setTextColor('#667085');
   doc.text(`TIN: ${business.taxId || 'Not provided'}`, 16, y + 7);
@@ -3633,7 +3640,7 @@ function SettingsScreen({
   const [allocationError, setAllocationError] = useState('');
   const [profile, setProfile] = useState({
     name: userName,
-    email: 'testing18@tradeease.local',
+    email: 'testing18@ojat.local',
     phone: '+234 800 000 0000',
   });
   const [syncPreferences, setSyncPreferences] = useState({
@@ -3644,7 +3651,7 @@ function SettingsScreen({
   const [security, setSecurity] = useState({
     pinEnabled: true,
     deviceLock: true,
-    recoveryEmail: 'testing18@tradeease.local',
+    recoveryEmail: 'testing18@ojat.local',
   });
   const [syncStatus, setSyncStatus] = useState('Synced');
   const [lastSync, setLastSync] = useState('May 8, 2026, 5:51 PM');
@@ -3897,7 +3904,7 @@ function SettingsScreen({
         Logout
       </button>
 
-      <footer className="settings-version">TradeEase v1.0.0</footer>
+      <footer className="settings-version">OJAT v1.0.0</footer>
 
       {activePanel === 'profile' && (
         <Sheet
@@ -3977,7 +3984,7 @@ function SettingsScreen({
             <ToggleRow
               name="pinEnabled"
               title="PIN protection"
-              description="Require a PIN before opening TradeEase"
+              description="Require a PIN before opening OJAT"
               defaultChecked={security.pinEnabled}
             />
             <ToggleRow
@@ -4217,10 +4224,8 @@ function AuthScreen({onLogin}) {
     <main className="auth-screen">
       <section className="auth-panel animate-in">
         <div className="brand-row">
-          <span className="brand-mark">
-            <Sparkles size={20} />
-          </span>
-          <strong>TradeEase</strong>
+          <img src={appIcon} alt="OJAT Logo" style={{ width: 28, height: 28 }} />
+          <strong>OJAT</strong>
         </div>
 
         <section className="auth-hero">
@@ -4228,7 +4233,7 @@ function AuthScreen({onLogin}) {
             <ShieldCheck size={16} />
             <span>Welcome Back</span>
           </div>
-          <h1>Sign in to TradeEase</h1>
+          <h1>Sign in to OJAT</h1>
           <p>
             Premium offline-first sales, inventory, expenses, reports, and cloud
             sync for modern businesses.
@@ -4239,7 +4244,7 @@ function AuthScreen({onLogin}) {
           <Field
             icon={Mail}
             placeholder="Email"
-            defaultValue="testing18@tradeease.local"
+            defaultValue="testing18@ojat.local"
           />
           <div className="password-field">
             <Field

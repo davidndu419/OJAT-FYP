@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ScrollView, StyleSheet, TouchableOpacity, View} from 'react-native';
+import {ScrollView, StyleSheet, TouchableOpacity, View, Image} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useFocusEffect} from '@react-navigation/native';
 import {useDispatch, useSelector} from 'react-redux';
@@ -279,7 +279,11 @@ function DashboardScreen({navigation}) {
         <View style={styles.topRow}>
           <View>
             <Text style={styles.greeting}>{greeting}</Text>
-            <Text style={styles.displayName}>{displayName}</Text>
+            <Image 
+              source={require('../assets/images/full_logo.png')} 
+              style={{height: 32, width: 100, marginTop: 4}} 
+              resizeMode="contain" 
+            />
           </View>
           <TouchableOpacity
             activeOpacity={0.84}
