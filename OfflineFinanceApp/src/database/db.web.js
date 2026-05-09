@@ -15,6 +15,8 @@ const createInitialState = () => ({
     {key: 'expense_allocation', value: 'combined'},
     {key: 'sales_expense_percent', value: '60'},
     {key: 'services_expense_percent', value: '40'},
+    {key: 'business_name', value: 'TradeEase Business'},
+    {key: 'business_tin', value: 'Not provided'},
   ],
 });
 
@@ -25,6 +27,33 @@ const getTodayKey = () => format(new Date(), 'yyyy-MM-dd');
 const normalizeState = nextState => ({
   ...createInitialState(),
   ...nextState,
+  products: (nextState?.products || []).map(product => ({
+    ...product,
+    purchase_price:
+      product.purchase_price !== undefined && product.purchase_price !== null
+        ? product.purchase_price
+        : product.cost_price,
+    weighted_average_cost:
+      product.weighted_average_cost !== undefined &&
+      product.weighted_average_cost !== null
+        ? product.weighted_average_cost
+        : product.purchase_price ?? product.cost_price,
+    purchase_batches:
+      product.purchase_batches ||
+      JSON.stringify(
+        Number(product.quantity || 0) > 0
+          ? [
+              {
+                quantity: Number(product.quantity || 0),
+                unitCost: Number(
+                  product.purchase_price ?? product.cost_price ?? 0,
+                ),
+                date: product.updated_at || getCurrentTimestamp(),
+              },
+            ]
+          : [],
+      ),
+  })),
   settings:
     nextState?.settings?.length > 0
       ? mergeDefaultSettings(nextState.settings)
@@ -150,6 +179,25 @@ const executeDailyBalanceSelect = normalizedSql => {
 const executeProductsSelect = (normalizedSql, params) => {
   const dbState = loadState();
 
+  if (normalizedSql.includes('sum(coalesce(weighted_average_cost')) {
+    return createResult([
+      {
+        total: dbState.products.reduce(
+          (sum, product) =>
+            sum +
+            Number(
+              product.weighted_average_cost ??
+                product.purchase_price ??
+                product.cost_price ??
+                0,
+            ) *
+              Number(product.quantity || 0),
+          0,
+        ),
+      },
+    ]);
+  }
+
   if (normalizedSql.includes('where coalesce(quantity')) {
     return createResult(
       sortBy(
@@ -190,7 +238,10 @@ const executeSalesSelect = (normalizedSql, params) => {
           acc.revenue += Number(sale.total || 0);
           acc[method] += Number(sale.total || 0);
           acc.cogs +=
-            Number(product?.cost_price || 0) * Number(sale.quantity || 0);
+            Number(sale.cogs || 0) > 0
+              ? Number(sale.cogs || 0)
+              : Number(product?.purchase_price ?? product?.cost_price ?? 0) *
+                Number(sale.quantity || 0);
           return acc;
         },
         {revenue: 0, cash: 0, bank: 0, cogs: 0},
@@ -212,6 +263,7 @@ const executeSalesSelect = (normalizedSql, params) => {
       return {
         ...sale,
         amount: sale.total,
+        cogs: Number(sale.cogs || 0),
         payment_method: sale.payment_method || 'cash',
         product_name: product?.name || null,
         title: product?.name || null,
@@ -277,7 +329,12 @@ const executeExpensesSelect = (normalizedSql, params) => {
     return createResult([{total: sumBy(rows, 'amount')}]);
   }
 
-  return createResult(sortBy(rows, 'date', 'DESC').slice(0, 25));
+  return createResult(
+    sortBy(rows, 'date', 'DESC').slice(
+      0,
+      normalizedSql.includes('limit 25') ? 25 : undefined,
+    ),
+  );
 };
 
 const executeServicesSelect = (normalizedSql, params) => {
@@ -391,23 +448,34 @@ const executeInsert = (normalizedSql, params) => {
   const dbState = loadState();
 
   if (normalizedSql.includes('into products')) {
-    const [
-      id,
-      name,
-      category,
-      cost_price,
-      selling_price,
-      quantity,
-      min_threshold,
-      updated_at,
-      synced,
-    ] = params;
+    const hasPurchasePrice = normalizedSql.includes('purchase_price');
+    const hasWeightedAverageCost = normalizedSql.includes(
+      'weighted_average_cost',
+    );
+    const id = params[0];
+    const name = params[1];
+    const category = params[2];
+    const cost_price = params[3];
+    const purchase_price = hasPurchasePrice ? params[4] : params[3];
+    const weighted_average_cost = hasWeightedAverageCost
+      ? params[5]
+      : purchase_price;
+    const purchase_batches = hasWeightedAverageCost ? params[6] : null;
+    const offset = hasWeightedAverageCost ? 2 : 0;
+    const selling_price = hasPurchasePrice ? params[5 + offset] : params[4];
+    const quantity = hasPurchasePrice ? params[6 + offset] : params[5];
+    const min_threshold = hasPurchasePrice ? params[7 + offset] : params[6];
+    const updated_at = hasPurchasePrice ? params[8 + offset] : params[7];
+    const synced = hasPurchasePrice ? params[9 + offset] : params[8];
     dbState.products = dbState.products.filter(product => product.id !== id);
     dbState.products.push({
       id,
       name,
       category,
       cost_price,
+      purchase_price,
+      weighted_average_cost,
+      purchase_batches,
       selling_price,
       quantity,
       min_threshold,
@@ -418,16 +486,23 @@ const executeInsert = (normalizedSql, params) => {
 
   if (normalizedSql.includes('into sales')) {
     const hasPaymentMethod = normalizedSql.includes('payment_method');
+    const hasCogs = normalizedSql.includes('cogs');
     const [id, product_id, quantity, total] = params;
-    const payment_method = hasPaymentMethod ? params[4] : 'cash';
-    const date = hasPaymentMethod ? params[5] : params[4];
-    const synced = hasPaymentMethod ? params[6] : params[5];
+    const cogs = hasCogs ? params[4] : 0;
+    const payment_method = hasPaymentMethod ? params[hasCogs ? 5 : 4] : 'cash';
+    const date = hasPaymentMethod
+      ? params[hasCogs ? 6 : 5]
+      : params[hasCogs ? 5 : 4];
+    const synced = hasPaymentMethod
+      ? params[hasCogs ? 7 : 6]
+      : params[hasCogs ? 6 : 5];
     dbState.sales = dbState.sales.filter(sale => sale.id !== id);
     dbState.sales.push({
       id,
       product_id,
       quantity,
       total,
+      cogs,
       payment_method,
       date,
       synced,
@@ -480,23 +555,67 @@ const executeUpdate = (normalizedSql, params) => {
 
   if (normalizedSql.includes('update products')) {
     if (normalizedSql.includes('set quantity')) {
-      const [quantity, updated_at, id] = params;
+      const hasCostUpdate = normalizedSql.includes('cost_price');
+      const hasPurchaseBatches = normalizedSql.includes('purchase_batches');
+      const quantity = params[0];
+      const cost_price = hasCostUpdate ? params[1] : undefined;
+      const purchase_price = hasCostUpdate ? params[2] : undefined;
+      const weighted_average_cost = hasCostUpdate ? params[3] : undefined;
+      const purchase_batches = hasCostUpdate
+        ? params[4]
+        : hasPurchaseBatches
+        ? params[1]
+        : undefined;
+      const updated_at = hasCostUpdate
+        ? params[5]
+        : hasPurchaseBatches
+        ? params[2]
+        : params[1];
+      const id = hasCostUpdate
+        ? params[6]
+        : hasPurchaseBatches
+        ? params[3]
+        : params[2];
       dbState.products = dbState.products.map(product =>
         product.id === id
-          ? {...product, quantity, updated_at, synced: 0}
+          ? {
+              ...product,
+              quantity,
+              ...(hasCostUpdate
+                ? {
+                    cost_price,
+                    purchase_price,
+                    weighted_average_cost,
+                    purchase_batches,
+                  }
+                : {}),
+              ...(hasPurchaseBatches && !hasCostUpdate
+                ? {purchase_batches}
+                : {}),
+              updated_at,
+              synced: 0,
+            }
           : product,
       );
     } else if (normalizedSql.includes('where id = ?')) {
-      const [
-        name,
-        category,
-        cost_price,
-        selling_price,
-        quantity,
-        min_threshold,
-        updated_at,
-        id,
-      ] = params;
+      const hasPurchasePrice = normalizedSql.includes('purchase_price');
+      const hasWeightedAverageCost = normalizedSql.includes(
+        'weighted_average_cost',
+      );
+      const name = params[0];
+      const category = params[1];
+      const cost_price = params[2];
+      const purchase_price = hasPurchasePrice ? params[3] : params[2];
+      const weighted_average_cost = hasWeightedAverageCost
+        ? params[4]
+        : purchase_price;
+      const purchase_batches = hasWeightedAverageCost ? params[5] : null;
+      const offset = hasWeightedAverageCost ? 2 : 0;
+      const selling_price = hasPurchasePrice ? params[4 + offset] : params[3];
+      const quantity = hasPurchasePrice ? params[5 + offset] : params[4];
+      const min_threshold = hasPurchasePrice ? params[6 + offset] : params[5];
+      const updated_at = hasPurchasePrice ? params[7 + offset] : params[6];
+      const id = hasPurchasePrice ? params[8 + offset] : params[7];
       dbState.products = dbState.products.map(product =>
         product.id === id
           ? {
@@ -504,6 +623,9 @@ const executeUpdate = (normalizedSql, params) => {
               name,
               category,
               cost_price,
+              purchase_price,
+              weighted_average_cost,
+              purchase_batches,
               selling_price,
               quantity,
               min_threshold,

@@ -1,5 +1,11 @@
 import React, {useCallback, useMemo, useState} from 'react';
-import {Dimensions, ScrollView, StyleSheet, View} from 'react-native';
+import {
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {
   ActivityIndicator,
@@ -12,6 +18,7 @@ import {
 } from 'react-native-paper';
 import {BarChart, PieChart} from 'react-native-chart-kit';
 import {format, formatISO, isValid, parseISO} from 'date-fns';
+import {History} from 'lucide-react-native';
 import {getDBConnection, getSetting} from '../database/db';
 import {formatCurrency, getRowsArray} from '../utils/helpers';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
@@ -117,7 +124,7 @@ const toChartData = rows => ({
 
 const hasChartData = rows => rows.some(item => Number(item.value || 0) > 0);
 
-function ReportsScreen() {
+function ReportsScreen({navigation}) {
   const defaultRange = useMemo(() => getDefaultRange(), []);
   const [fromDate, setFromDate] = useState(defaultRange.from);
   const [toDate, setToDate] = useState(defaultRange.to);
@@ -160,7 +167,7 @@ function ReportsScreen() {
           `SELECT COALESCE(SUM(sales.total), 0) AS revenue,
                   COALESCE(SUM(CASE WHEN COALESCE(sales.payment_method, 'cash') = 'cash' THEN sales.total ELSE 0 END), 0) AS cash,
                   COALESCE(SUM(CASE WHEN COALESCE(sales.payment_method, 'cash') = 'bank' THEN sales.total ELSE 0 END), 0) AS bank,
-                  COALESCE(SUM(COALESCE(products.cost_price, 0) * COALESCE(sales.quantity, 0)), 0) AS cogs
+                  COALESCE(SUM(COALESCE(NULLIF(sales.cogs, 0), COALESCE(products.purchase_price, products.cost_price, 0) * COALESCE(sales.quantity, 0))), 0) AS cogs
            FROM sales
            LEFT JOIN products ON products.id = sales.product_id
            WHERE sales.date BETWEEN ? AND ?;`,
@@ -376,11 +383,31 @@ function ReportsScreen() {
     }
   };
 
+  const openTransactions = () => {
+    const parentNavigation = navigation.getParent?.();
+
+    if (parentNavigation) {
+      parentNavigation.navigate('TransactionHistory');
+      return;
+    }
+
+    navigation.navigate('TransactionHistory');
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.eyebrow}>Reports</Text>
-        <Text style={styles.title}>Insights</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Insights</Text>
+          <TouchableOpacity
+            activeOpacity={0.84}
+            onPress={openTransactions}
+            style={styles.transactionsButton}>
+            <History color={COLORS.primary} size={16} strokeWidth={2.4} />
+            <Text style={styles.transactionsButtonText}>Transactions</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.subtitle}>
           Sales, services, expenses, and profit from local SQLite records.
         </Text>
@@ -787,6 +814,29 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: '800',
     lineHeight: 38,
+  },
+  titleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  transactionsButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 10,
+  },
+  transactionsButtonText: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
   },
   subtitle: {
     color: COLORS.muted,

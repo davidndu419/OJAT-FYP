@@ -44,6 +44,9 @@ const TABLE_CONFIG = {
       'name',
       'category',
       'cost_price',
+      'purchase_price',
+      'weighted_average_cost',
+      'purchase_batches',
       'selling_price',
       'quantity',
       'min_threshold',
@@ -54,6 +57,9 @@ const TABLE_CONFIG = {
       'name',
       'category',
       'cost_price',
+      'purchase_price',
+      'weighted_average_cost',
+      'purchase_batches',
       'selling_price',
       'quantity',
       'min_threshold',
@@ -70,11 +76,19 @@ const TABLE_CONFIG = {
       'product_id',
       'quantity',
       'total',
+      'cogs',
       'date',
       'payment_method',
       'synced',
     ],
-    updateColumns: ['product_id', 'quantity', 'total', 'date', 'payment_method'],
+    updateColumns: [
+      'product_id',
+      'quantity',
+      'total',
+      'cogs',
+      'date',
+      'payment_method',
+    ],
   },
   expenses: {
     resultKey: 'expenses',
@@ -98,7 +112,13 @@ const TABLE_CONFIG = {
       'notes',
       'synced',
     ],
-    updateColumns: ['service_type', 'amount', 'payment_method', 'date', 'notes'],
+    updateColumns: [
+      'service_type',
+      'amount',
+      'payment_method',
+      'date',
+      'notes',
+    ],
   },
   service_types: {
     resultKey: 'serviceTypes',
@@ -188,6 +208,12 @@ const getColumnValue = (record, column) => {
 
   if (column === 'updated_at') {
     return record?.updated_at || record?.date || record?.created_at || null;
+  }
+
+  if (column === 'purchase_batches') {
+    return Array.isArray(record?.purchase_batches)
+      ? JSON.stringify(record.purchase_batches)
+      : record?.purchase_batches ?? null;
   }
 
   return record?.[column] ?? null;

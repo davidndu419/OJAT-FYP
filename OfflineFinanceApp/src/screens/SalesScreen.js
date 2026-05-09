@@ -1,13 +1,16 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
+  TextInput as RNTextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
+import {ArrowLeft, Search} from 'lucide-react-native';
 import {
   ActivityIndicator,
   Button,
@@ -35,6 +38,10 @@ import {
   getCurrentTimestamp,
   getRowsArray,
 } from '../utils/helpers';
+import {
+  depletePurchaseBatchesFifo,
+  serializePurchaseBatches,
+} from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
 
 const getTodayRange = () => {
@@ -80,7 +87,18 @@ function SalesScreen() {
   const [saleModalVisible, setSaleModalVisible] = useState(false);
   const [serviceModalVisible, setServiceModalVisible] = useState(false);
   const [productSearch, setProductSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [saleStep, setSaleStep] = useState(1);
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(productSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [productSearch]);
   const [quantity, setQuantity] = useState('');
   const [salePaymentMethod, setSalePaymentMethod] = useState('cash');
   const [serviceAmount, setServiceAmount] = useState('');
@@ -106,8 +124,10 @@ function SalesScreen() {
           db.executeSql('SELECT * FROM service_types ORDER BY name ASC;'),
           db.executeSql(
             `SELECT sales.id,
+                  sales.product_id,
                   sales.quantity,
                   sales.total AS amount,
+                  COALESCE(sales.cogs, 0) AS cogs,
                   sales.date,
                   COALESCE(sales.payment_method, 'cash') AS payment_method,
                   products.name AS title,
@@ -164,19 +184,47 @@ function SalesScreen() {
     }, [loadSalesData]),
   );
 
-  const filteredProducts = useMemo(() => {
-    const query = productSearch.trim().toLowerCase();
+  const categories = useMemo(() => {
+    const cats = new Set(products.map(p => p.category).filter(Boolean));
+    return ['All', ...Array.from(cats)].sort();
+  }, [products]);
 
-    if (!query) {
-      return products;
+  const salesCounts = useMemo(() => {
+    const counts = {};
+    transactions.forEach(t => {
+      if (t.kind === 'sale' && t.product_id) {
+        counts[t.product_id] = (counts[t.product_id] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [transactions]);
+
+  const filteredProducts = useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+    
+    let result = products;
+    if (selectedCategory !== 'All') {
+      result = result.filter(p => p.category === selectedCategory);
+    }
+    
+    if (query) {
+      result = result.filter(product =>
+        String(product.name || '').toLowerCase().includes(query) ||
+        String(product.category || '').toLowerCase().includes(query)
+      );
+    } else {
+      result = [...result].sort((a, b) => {
+        const countA = salesCounts[a.id] || 0;
+        const countB = salesCounts[b.id] || 0;
+        return countB - countA;
+      });
+      if (selectedCategory === 'All') {
+        result = result.slice(0, 4);
+      }
     }
 
-    return products.filter(product =>
-      String(product.name || '')
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [productSearch, products]);
+    return result;
+  }, [debouncedSearch, products, selectedCategory, salesCounts]);
 
   const filteredTransactions = useMemo(() => {
     if (transactionView === 'sales') {
@@ -198,9 +246,12 @@ function SalesScreen() {
   const closeSaleModal = () => {
     setSaleModalVisible(false);
     setProductSearch('');
+    setDebouncedSearch('');
     setSelectedProduct(null);
     setQuantity('');
     setSalePaymentMethod('cash');
+    setSaleStep(1);
+    setSelectedCategory('All');
     setErrors({});
   };
 
@@ -270,6 +321,13 @@ function SalesScreen() {
       const remainingQuantity =
         Number(selectedProduct.quantity || 0) - soldQuantity;
       const total = soldQuantity * Number(selectedProduct.selling_price || 0);
+      const fifoResult = depletePurchaseBatchesFifo(
+        selectedProduct,
+        soldQuantity,
+      );
+      const remainingPurchaseBatches = serializePurchaseBatches(
+        fifoResult.remainingBatches,
+      );
 
       await new Promise((resolve, reject) => {
         db.transaction(
@@ -280,15 +338,17 @@ function SalesScreen() {
                  product_id,
                  quantity,
                  total,
+                 cogs,
                  payment_method,
                  date,
                  synced
-               ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
               [
                 generateId(),
                 selectedProduct.id,
                 soldQuantity,
                 total,
+                fifoResult.cogs,
                 salePaymentMethod,
                 saleDate,
                 0,
@@ -297,10 +357,16 @@ function SalesScreen() {
             tx.executeSql(
               `UPDATE products
                SET quantity = ?,
+                   purchase_batches = ?,
                    updated_at = ?,
                    synced = 0
                WHERE id = ?;`,
-              [remainingQuantity, saleDate, selectedProduct.id],
+              [
+                remainingQuantity,
+                remainingPurchaseBatches,
+                saleDate,
+                selectedProduct.id,
+              ],
             );
           },
           error => reject(error),
@@ -391,31 +457,38 @@ function SalesScreen() {
     ];
   }, [balance, balanceView]);
 
-  const renderProduct = ({item}) => (
-    <Card
-      mode="outlined"
-      style={[
-        styles.optionCard,
-        selectedProduct?.id === item.id && styles.selectedOptionCard,
-      ]}
-      onPress={() => {
-        setSelectedProduct(item);
-        setProductSearch(item.name);
-        setErrors(current => ({...current, product: '', form: ''}));
-      }}>
-      <Card.Content style={styles.optionContent}>
-        <View style={styles.optionText}>
-          <Text style={styles.optionTitle}>{item.name}</Text>
-          <Text style={styles.optionSubtitle}>
-            Qty {item.quantity || 0} | {formatCurrency(item.selling_price)}
-          </Text>
-        </View>
-        <Chip compact selected={selectedProduct?.id === item.id}>
-          Select
-        </Chip>
-      </Card.Content>
-    </Card>
-  );
+  const renderProduct = ({item}) => {
+    const isOnlyMatch = filteredProducts.length === 1 && debouncedSearch.trim().length > 0;
+    
+    return (
+      <TouchableOpacity
+        activeOpacity={0.84}
+        onPress={() => {
+          setSelectedProduct(item);
+          setSaleStep(2);
+          setErrors(current => ({...current, product: '', form: ''}));
+        }}>
+        <Card
+          mode="outlined"
+          style={[
+            styles.compactOptionCard,
+            isOnlyMatch && styles.selectedOptionCard,
+          ]}>
+          <Card.Content style={styles.compactOptionContent}>
+            <View style={styles.optionText}>
+              <Text style={styles.optionTitle}>{item.name}</Text>
+              <Text style={styles.optionSubtitle}>
+                {item.category || 'SKU'} · Qty {item.quantity || 0} | {formatCurrency(item.selling_price)}
+              </Text>
+            </View>
+            <Chip compact selected={isOnlyMatch}>
+              Select
+            </Chip>
+          </Card.Content>
+        </Card>
+      </TouchableOpacity>
+    );
+  };
 
   const renderTransaction = ({item}) => {
     const isSale = item.kind === 'sale';
@@ -555,40 +628,106 @@ function SalesScreen() {
         <Modal
           visible={saleModalVisible}
           onDismiss={closeSaleModal}
-          contentContainerStyle={styles.modalCard}>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <Text style={styles.modalTitle}>Record Product Sale</Text>
-            {products.length === 0 ? (
-              <Text style={styles.emptyText}>
-                Add products in Inventory before recording sales.
-              </Text>
+          contentContainerStyle={styles.bottomSheetModal}
+          onShow={() => {
+            if (saleStep === 1 && searchInputRef.current) {
+               setTimeout(() => searchInputRef.current.focus(), 100);
+            }
+          }}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.sheetHandle} />
+            
+            {saleStep === 1 ? (
+              <View style={styles.stepContainer}>
+                <Text style={styles.modalTitle}>Select Product</Text>
+                {products.length === 0 ? (
+                  <Text style={styles.emptyText}>
+                    Add products in Inventory before recording sales.
+                  </Text>
+                ) : (
+                  <>
+                    <View style={styles.searchWrap}>
+                      <Search
+                        color={COLORS.muted}
+                        size={19}
+                        strokeWidth={2.4}
+                        style={styles.searchIcon}
+                      />
+                      <RNTextInput
+                        ref={searchInputRef}
+                        placeholder="Search product..."
+                        placeholderTextColor={COLORS.muted}
+                        value={productSearch}
+                        onChangeText={value => {
+                          setProductSearch(value);
+                          setErrors(current => ({...current, product: '', form: ''}));
+                        }}
+                        style={styles.searchInput}
+                      />
+                    </View>
+                    
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false} 
+                      style={styles.chipScroll}
+                      contentContainerStyle={styles.chipScrollContent}>
+                      {categories.map(cat => (
+                        <Chip
+                          key={cat}
+                          selected={selectedCategory === cat}
+                          onPress={() => setSelectedCategory(cat)}
+                          style={styles.categoryChip}
+                          textStyle={selectedCategory === cat ? styles.categoryChipTextSelected : styles.categoryChipText}
+                        >
+                          {cat}
+                        </Chip>
+                      ))}
+                    </ScrollView>
+
+                    {errors.product ? (
+                      <Text style={styles.errorText}>{errors.product}</Text>
+                    ) : null}
+                    
+                    {!debouncedSearch && selectedCategory === 'All' && filteredProducts.length > 0 && (
+                       <Text style={styles.sectionEyebrow}>FREQUENTLY SOLD</Text>
+                    )}
+                    
+                    <FlatList
+                      data={filteredProducts}
+                      keyExtractor={item => item.id}
+                      renderItem={renderProduct}
+                      scrollEnabled={true}
+                      style={styles.productList}
+                      keyboardShouldPersistTaps="handled"
+                      ListEmptyComponent={
+                        <Text style={styles.emptyText}>
+                          No matching products found.
+                        </Text>
+                      }
+                    />
+                  </>
+                )}
+              </View>
             ) : (
-              <>
-                <TextInput
-                  mode="outlined"
-                  label="Search product"
-                  value={productSearch}
-                  onChangeText={value => {
-                    setProductSearch(value);
-                    setSelectedProduct(null);
-                    setErrors(current => ({...current, product: '', form: ''}));
-                  }}
-                  style={styles.input}
-                />
-                {errors.product ? (
-                  <Text style={styles.errorText}>{errors.product}</Text>
-                ) : null}
-                <FlatList
-                  data={filteredProducts}
-                  keyExtractor={item => item.id}
-                  renderItem={renderProduct}
-                  scrollEnabled={false}
-                  ListEmptyComponent={
-                    <Text style={styles.emptyText}>
-                      No matching products found.
-                    </Text>
-                  }
-                />
+              <View style={styles.stepContainer}>
+                <View style={styles.stepHeader}>
+                  <TouchableOpacity onPress={() => setSaleStep(1)} style={styles.backButton}>
+                    <ArrowLeft color={COLORS.text} size={24} />
+                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>Configure Sale</Text>
+                </View>
+                
+                <Card mode="outlined" style={styles.selectedProductCard}>
+                   <Card.Content style={styles.compactOptionContent}>
+                     <View style={styles.optionText}>
+                       <Text style={styles.optionTitle}>{selectedProduct?.name}</Text>
+                       <Text style={styles.optionSubtitle}>
+                         Available: {selectedProduct?.quantity || 0} | {formatCurrency(selectedProduct?.selling_price)}
+                       </Text>
+                     </View>
+                   </Card.Content>
+                </Card>
+
                 <TextInput
                   mode="outlined"
                   label="Quantity"
@@ -628,29 +767,31 @@ function SalesScreen() {
                 {errors.form ? (
                   <Text style={styles.errorText}>{errors.form}</Text>
                 ) : null}
-                <View style={styles.modalActions}>
-                  <Button mode="outlined" onPress={closeSaleModal}>
-                    Cancel
-                  </Button>
+                <View style={styles.modalActionsFull}>
                   <Button
                     mode="contained"
                     loading={isSaving}
-                    disabled={isSaving}
-                    onPress={handleConfirmSale}>
+                    disabled={isSaving || !quantity.trim() || Number(quantity) <= 0 || Number(quantity) > Number(selectedProduct?.quantity || 0)}
+                    onPress={handleConfirmSale}
+                    style={styles.confirmButton}
+                    contentStyle={styles.confirmButtonContent}
+                  >
                     Confirm Sale
                   </Button>
                 </View>
-              </>
+              </View>
             )}
-          </ScrollView>
+          </KeyboardAvoidingView>
         </Modal>
 
         <Modal
           visible={serviceModalVisible}
           onDismiss={closeServiceModal}
-          contentContainerStyle={styles.modalCard}>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <Text style={styles.modalTitle}>Record Service</Text>
+          contentContainerStyle={styles.bottomSheetModal}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.sheetHandle} />
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Record Service</Text>
             <TextInput
               mode="outlined"
               label="Amount"
@@ -742,7 +883,8 @@ function SalesScreen() {
                 Save Service
               </Button>
             </View>
-          </ScrollView>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </Modal>
       </Portal>
 
@@ -911,14 +1053,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
   },
-  modalCard: {
+  bottomSheetModal: {
     alignSelf: 'center',
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    maxHeight: '88%',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    bottom: 80,
+    left: 0,
     maxWidth: 448,
     padding: 18,
-    width: '92%',
+    position: 'absolute',
+    right: 0,
+    width: '100%',
+    maxHeight: '85%',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    backgroundColor: COLORS.line,
+    borderRadius: 3,
+    height: 5,
+    marginBottom: 14,
+    width: 44,
+  },
+  stepContainer: {
+    flexShrink: 1,
+  },
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 4,
   },
   modalTitle: {
     color: COLORS.text,
@@ -927,11 +1096,63 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 12,
   },
+  searchWrap: {
+    marginBottom: 12,
+    position: 'relative',
+  },
+  searchIcon: {
+    left: 16,
+    position: 'absolute',
+    top: 16,
+    zIndex: 1,
+  },
+  searchInput: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    height: 52,
+    paddingLeft: 46,
+    paddingRight: 16,
+  },
+  chipScroll: {
+    flexGrow: 0,
+    marginBottom: 12,
+  },
+  chipScrollContent: {
+    gap: 8,
+    paddingRight: 20,
+  },
+  categoryChip: {
+    borderRadius: 18,
+  },
+  categoryChipText: {
+    color: COLORS.muted,
+  },
+  categoryChipTextSelected: {
+    color: COLORS.primaryDark,
+    fontWeight: '700',
+  },
+  sectionEyebrow: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  productList: {
+    flexShrink: 1,
+  },
   input: {
     backgroundColor: COLORS.surface,
     marginTop: 10,
   },
-  optionCard: {
+  compactOptionCard: {
     borderRadius: 8,
     marginTop: 8,
   },
@@ -939,10 +1160,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryPale,
     borderColor: COLORS.primary,
   },
-  optionContent: {
+  selectedProductCard: {
+    backgroundColor: COLORS.primaryPale,
+    borderColor: COLORS.primary,
+    marginBottom: 8,
+  },
+  compactOptionContent: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
   optionText: {
     flex: 1,
@@ -957,6 +1185,16 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY,
     fontSize: 12,
     marginTop: 2,
+  },
+  modalActionsFull: {
+    marginTop: 18,
+    width: '100%',
+  },
+  confirmButton: {
+    borderRadius: 8,
+  },
+  confirmButtonContent: {
+    minHeight: 52,
   },
   fieldLabel: {
     color: COLORS.text,

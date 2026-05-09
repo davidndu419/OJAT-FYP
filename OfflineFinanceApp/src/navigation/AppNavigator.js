@@ -29,6 +29,7 @@ import ExpenseScreen from '../screens/ExpenseScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import SyncScreen from '../screens/SyncScreen';
+import TransactionHistoryScreen from '../screens/TransactionHistoryScreen';
 import {STORAGE_KEYS} from '../utils/constants';
 import {loginSuccess} from '../store/slices/authSlice';
 import {COLORS, FONT_FAMILY, glowShadow, softShadow} from '../theme/theme';
@@ -209,7 +210,17 @@ function AppNavigator() {
 
   return (
     <NavigationContainer>
-      {isAuthenticated ? <MainTabs /> : <AuthNavigator />}
+      {isAuthenticated ? (
+        <Stack.Navigator screenOptions={stackScreenOptions}>
+          <Stack.Screen name="MainTabs" component={MainTabs} />
+          <Stack.Screen
+            name="TransactionHistory"
+            component={TransactionHistoryScreen}
+          />
+        </Stack.Navigator>
+      ) : (
+        <AuthNavigator />
+      )}
     </NavigationContainer>
   );
 }

@@ -15,13 +15,19 @@ import {
 } from 'react-native-paper';
 import {getDBConnection} from '../database/db';
 import {generateId, getCurrentTimestamp} from '../utils/helpers';
+import {
+  getProductPurchaseBatches,
+  serializePurchaseBatches,
+} from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
 
 const createInitialForm = product => ({
   name: product?.name ? String(product.name) : '',
   category: product?.category ? String(product.category) : '',
   costPrice:
-    product?.cost_price !== undefined && product?.cost_price !== null
+    product?.purchase_price !== undefined && product?.purchase_price !== null
+      ? String(product.purchase_price)
+      : product?.cost_price !== undefined && product?.cost_price !== null
       ? String(product.cost_price)
       : '',
   sellingPrice:
@@ -67,9 +73,9 @@ function AddEditProductScreen({navigation, route}) {
     }
 
     if (!form.costPrice.trim()) {
-      nextErrors.costPrice = 'Cost price is required.';
+      nextErrors.costPrice = 'Purchase price is required.';
     } else if (!isDecimalNumber(form.costPrice)) {
-      nextErrors.costPrice = 'Cost price must be a valid number.';
+      nextErrors.costPrice = 'Purchase price must be a valid number.';
     }
 
     if (!form.sellingPrice.trim()) {
@@ -104,13 +110,36 @@ function AddEditProductScreen({navigation, route}) {
       const db = await getDBConnection();
       const productId = isEditing ? product.id : generateId();
       const updatedAt = getCurrentTimestamp();
+      const purchasePrice = Number(form.costPrice);
+      const quantity = Number(form.quantity);
+      const originalQuantity = Number(product?.quantity || 0);
+      const originalPurchasePrice = Number(
+        product?.purchase_price ?? product?.cost_price ?? 0,
+      );
+      const shouldResetBatches =
+        !isEditing ||
+        quantity !== originalQuantity ||
+        purchasePrice !== originalPurchasePrice;
+      const weightedAverageCost = shouldResetBatches
+        ? purchasePrice
+        : Number(product?.weighted_average_cost ?? purchasePrice);
+      const purchaseBatches = serializePurchaseBatches(
+        shouldResetBatches
+          ? quantity > 0 && purchasePrice > 0
+            ? [{quantity, unitCost: purchasePrice, date: updatedAt}]
+            : []
+          : getProductPurchaseBatches(product),
+      );
       const productValues = [
         productId,
         form.name.trim(),
         form.category.trim(),
-        Number(form.costPrice),
+        purchasePrice,
+        purchasePrice,
+        weightedAverageCost,
+        purchaseBatches,
         Number(form.sellingPrice),
-        Number(form.quantity),
+        quantity,
         Number(form.minThreshold),
         updatedAt,
         0,
@@ -122,6 +151,9 @@ function AddEditProductScreen({navigation, route}) {
            SET name = ?,
                category = ?,
                cost_price = ?,
+               purchase_price = ?,
+               weighted_average_cost = ?,
+               purchase_batches = ?,
                selling_price = ?,
                quantity = ?,
                min_threshold = ?,
@@ -136,14 +168,17 @@ function AddEditProductScreen({navigation, route}) {
             productValues[5],
             productValues[6],
             productValues[7],
+            productValues[8],
+            productValues[9],
+            productValues[10],
             productId,
           ],
         );
       } else {
         await db.executeSql(
           `INSERT INTO products
-           (id, name, category, cost_price, selling_price, quantity, min_threshold, updated_at, synced)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+           (id, name, category, cost_price, purchase_price, weighted_average_cost, purchase_batches, selling_price, quantity, min_threshold, updated_at, synced)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
           productValues,
         );
       }
@@ -226,7 +261,7 @@ function AddEditProductScreen({navigation, route}) {
         </HelperText>
 
         <TextInput
-          label="Cost price"
+          label="Purchase price"
           value={form.costPrice}
           onChangeText={value => updateField('costPrice', value)}
           mode="outlined"

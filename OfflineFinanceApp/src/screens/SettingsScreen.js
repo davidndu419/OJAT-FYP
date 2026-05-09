@@ -1,22 +1,134 @@
 import React, {useCallback, useState} from 'react';
-import {FlatList, ScrollView, StyleSheet, View} from 'react-native';
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {
   Button,
-  Card,
   Divider,
+  Portal,
   RadioButton,
   Snackbar,
   Text,
   TextInput,
 } from 'react-native-paper';
+import {
+  ChevronRight,
+  Layers,
+  LayoutGrid,
+  PieChart,
+  User,
+  X,
+} from 'lucide-react-native';
 import {getDBConnection, getSetting, setSetting} from '../database/db';
 import {generateId, getCurrentTimestamp, getRowsArray} from '../utils/helpers';
-import {COLORS, FONT_FAMILY} from '../theme/theme';
+import {COLORS, FONT_FAMILY, cardShadow} from '../theme/theme';
+import {IconBubble} from '../components/KoboUI';
+
+/* ─────────── helper maps for real-time sub-labels ─────────── */
+const BALANCE_LABELS = {
+  separate: 'Separate Sales & Services',
+  combined: 'Combined view',
+  services_only: 'Services only',
+};
+
+const EXPENSE_LABELS = {
+  combined: 'All Expenses',
+  split: 'Split Expenses',
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   Settings Row — matches the "Personal Info" row pattern
+   ═══════════════════════════════════════════════════════════════ */
+function SettingsRow({icon: Icon, iconTone, title, subtitle, onPress}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={onPress}
+      style={styles.settingsRow}>
+      <IconBubble tone={iconTone} size={44}>
+        <Icon color={iconTone === 'primary' ? COLORS.primary : iconTone === 'success' ? COLORS.success : COLORS.warning} size={20} />
+      </IconBubble>
+      <View style={styles.settingsRowText}>
+        <Text style={styles.settingsRowTitle}>{title}</Text>
+        <Text style={styles.settingsRowSub} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+      <ChevronRight color={COLORS.muted} size={20} />
+    </TouchableOpacity>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Bottom-Sheet Module — anchored at bottom-80, vertically locked
+   ═══════════════════════════════════════════════════════════════ */
+function BottomSheetModule({visible, title, onDismiss, children}) {
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <Portal>
+      {/* backdrop */}
+      <Pressable style={styles.backdrop} onPress={onDismiss} />
+
+      {/* sheet card — fixed at bottom-80 */}
+      <View style={styles.sheetContainer}>
+        <View style={styles.sheetCard}>
+          {/* header */}
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>{title}</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              hitSlop={12}
+              onPress={onDismiss}
+              style={styles.sheetClose}>
+              <X color={COLORS.muted} size={20} />
+            </TouchableOpacity>
+          </View>
+          <Divider style={styles.sheetDivider} />
+          {/* body */}
+          <ScrollView
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={styles.sheetBody}>
+            {children}
+          </ScrollView>
+        </View>
+      </View>
+    </Portal>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Radio row helper
+   ═══════════════════════════════════════════════════════════════ */
+function RadioOption({label, value}) {
+  return (
+    <RadioButton.Item
+      label={label}
+      value={value}
+      labelStyle={styles.radioLabel}
+      style={styles.radioItem}
+      position="leading"
+    />
+  );
+}
 
 const ServiceSeparator = () => <Divider />;
 
+/* ═══════════════════════════════════════════════════════════════
+   MAIN SETTINGS SCREEN
+   ═══════════════════════════════════════════════════════════════ */
 function SettingsScreen() {
+  /* ── state ─────────────────────────────────────────────── */
   const [serviceTypes, setServiceTypes] = useState([]);
   const [newServiceType, setNewServiceType] = useState('');
   const [balanceDisplay, setBalanceDisplay] = useState('separate');
@@ -27,6 +139,12 @@ function SettingsScreen() {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  /* module visibility */
+  const [serviceModuleOpen, setServiceModuleOpen] = useState(false);
+  const [balanceModuleOpen, setBalanceModuleOpen] = useState(false);
+  const [profitModuleOpen, setProfitModuleOpen] = useState(false);
+
+  /* ── data loading ──────────────────────────────────────── */
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -65,6 +183,7 @@ function SettingsScreen() {
     }, [loadSettings]),
   );
 
+  /* ── handlers: service types ───────────────────────────── */
   const handleAddServiceType = async () => {
     const name = newServiceType.trim();
     const duplicate = serviceTypes.some(
@@ -122,6 +241,7 @@ function SettingsScreen() {
     }
   };
 
+  /* ── handlers: balance display ─────────────────────────── */
   const updateBalanceDisplay = async value => {
     setBalanceDisplay(value);
     setErrors(current => ({...current, form: ''}));
@@ -129,6 +249,7 @@ function SettingsScreen() {
     setMessage('Balance display preference saved.');
   };
 
+  /* ── handlers: profit calculation ──────────────────────── */
   const updateExpenseAllocation = async value => {
     setExpenseAllocation(value);
     setErrors(current => ({...current, allocation: '', form: ''}));
@@ -172,6 +293,17 @@ function SettingsScreen() {
     savePercentagesIfValid(salesPercent, value);
   };
 
+  /* ── derived sub-labels ────────────────────────────────── */
+  const serviceSubLabel =
+    serviceTypes.length > 0
+      ? `${serviceTypes.length} service type${serviceTypes.length !== 1 ? 's' : ''} configured`
+      : 'Customize your service offerings';
+
+  const balanceSubLabel = `Currently: ${BALANCE_LABELS[balanceDisplay] || 'Separate Sales & Services'}`;
+
+  const profitSubLabel = `Currently: ${EXPENSE_LABELS[expenseAllocation] || 'All Expenses'}`;
+
+  /* ── service type list renderer ────────────────────────── */
   const renderServiceType = ({item}) => (
     <View style={styles.serviceRow}>
       <View style={styles.serviceText}>
@@ -187,145 +319,188 @@ function SettingsScreen() {
     </View>
   );
 
+  /* ═══════════════════════════ RENDER ═══════════════════════ */
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>Settings</Text>
-        <Text style={styles.title}>Business Setup</Text>
-        <Text style={styles.subtitle}>
-          Configure service types, balance display, and profit allocation.
-        </Text>
-      </View>
+    <View style={styles.screenRoot}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        {/* ── Header ────────────────────────────────────── */}
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>Settings</Text>
+          <Text style={styles.title}>Business Setup</Text>
+          <Text style={styles.subtitle}>
+            Configure service types, balance display, and profit allocation.
+          </Text>
+        </View>
 
-      <Card mode="outlined" style={styles.card}>
-        <Card.Content>
-          <Text style={styles.cardTitle}>Service Types Management</Text>
-          <View style={styles.addRow}>
+        {/* ── Business Configuration section ────────────── */}
+        <Text style={styles.sectionLabel}>BUSINESS CONFIGURATION</Text>
+        <View style={styles.listCard}>
+          <SettingsRow
+            icon={Layers}
+            iconTone="primary"
+            title="Service Types"
+            subtitle={serviceSubLabel}
+            onPress={() => setServiceModuleOpen(true)}
+          />
+          <Divider style={styles.rowDivider} />
+          <SettingsRow
+            icon={LayoutGrid}
+            iconTone="success"
+            title="Balance Display"
+            subtitle={balanceSubLabel}
+            onPress={() => setBalanceModuleOpen(true)}
+          />
+          <Divider style={styles.rowDivider} />
+          <SettingsRow
+            icon={PieChart}
+            iconTone="warning"
+            title="Profit Calculation"
+            subtitle={profitSubLabel}
+            onPress={() => setProfitModuleOpen(true)}
+          />
+        </View>
+
+        {/* ── Account section (preserved) ───────────────── */}
+        <Text style={styles.sectionLabel}>ACCOUNT</Text>
+        <View style={styles.listCard}>
+          <SettingsRow
+            icon={User}
+            iconTone="primary"
+            title="Personal Info"
+            subtitle="Profile, email, and contact details"
+            onPress={() => {}}
+          />
+        </View>
+
+        {errors.form ? <Text style={styles.errorText}>{errors.form}</Text> : null}
+        {isLoading ? (
+          <Text style={styles.loadingText}>Refreshing settings...</Text>
+        ) : null}
+      </ScrollView>
+
+      {/* ═══════════ SERVICE TYPES MODULE ═══════════ */}
+      <BottomSheetModule
+        visible={serviceModuleOpen}
+        title="Service Types"
+        onDismiss={() => setServiceModuleOpen(false)}>
+        <View style={styles.addRow}>
+          <TextInput
+            mode="outlined"
+            label="New service type"
+            value={newServiceType}
+            onChangeText={value => {
+              setNewServiceType(value);
+              setErrors(current => ({...current, serviceType: '', form: ''}));
+            }}
+            style={styles.addInput}
+          />
+          <Button
+            mode="contained"
+            onPress={handleAddServiceType}
+            style={styles.addButton}>
+            Add
+          </Button>
+        </View>
+        {errors.serviceType ? (
+          <Text style={styles.errorText}>{errors.serviceType}</Text>
+        ) : null}
+        <Divider style={styles.divider} />
+        {serviceTypes.length > 0 ? (
+          <FlatList
+            data={serviceTypes}
+            keyExtractor={item => item.id}
+            renderItem={renderServiceType}
+            scrollEnabled={false}
+            ItemSeparatorComponent={ServiceSeparator}
+          />
+        ) : (
+          <Text style={styles.emptyText}>No service types added yet.</Text>
+        )}
+      </BottomSheetModule>
+
+      {/* ═══════════ BALANCE DISPLAY MODULE ═══════════ */}
+      <BottomSheetModule
+        visible={balanceModuleOpen}
+        title="Balance Card Display"
+        onDismiss={() => setBalanceModuleOpen(false)}>
+        <RadioButton.Group
+          onValueChange={updateBalanceDisplay}
+          value={balanceDisplay}>
+          <RadioOption
+            label="Show Sales and Services separately"
+            value="separate"
+          />
+          <RadioOption
+            label="Combine Sales and Services together"
+            value="combined"
+          />
+          <RadioOption label="Show Services only" value="services_only" />
+        </RadioButton.Group>
+      </BottomSheetModule>
+
+      {/* ═══════════ PROFIT CALCULATION MODULE ═══════════ */}
+      <BottomSheetModule
+        visible={profitModuleOpen}
+        title="Profit Calculation"
+        onDismiss={() => setProfitModuleOpen(false)}>
+        <RadioButton.Group
+          onValueChange={updateExpenseAllocation}
+          value={expenseAllocation}>
+          <RadioOption
+            label="All expenses apply to total business"
+            value="combined"
+          />
+          <RadioOption
+            label="Split expenses between Sales and Services"
+            value="split"
+          />
+        </RadioButton.Group>
+        {expenseAllocation === 'split' ? (
+          <View style={styles.percentPanel}>
             <TextInput
               mode="outlined"
-              label="New service type"
-              value={newServiceType}
-              onChangeText={value => {
-                setNewServiceType(value);
-                setErrors(current => ({...current, serviceType: '', form: ''}));
-              }}
-              style={styles.addInput}
+              label="Sales percentage"
+              value={salesPercent}
+              onChangeText={updateSalesPercent}
+              keyboardType="decimal-pad"
+              style={styles.percentInput}
             />
-            <Button
-              mode="contained"
-              onPress={handleAddServiceType}
-              style={styles.addButton}>
-              Add
-            </Button>
+            <TextInput
+              mode="outlined"
+              label="Services percentage"
+              value={servicesPercent}
+              onChangeText={updateServicesPercent}
+              keyboardType="decimal-pad"
+              style={styles.percentInput}
+            />
+            {errors.allocation ? (
+              <Text style={styles.errorText}>{errors.allocation}</Text>
+            ) : null}
           </View>
-          {errors.serviceType ? (
-            <Text style={styles.errorText}>{errors.serviceType}</Text>
-          ) : null}
-          <Divider style={styles.divider} />
-          {serviceTypes.length > 0 ? (
-            <FlatList
-              data={serviceTypes}
-              keyExtractor={item => item.id}
-              renderItem={renderServiceType}
-              scrollEnabled={false}
-              ItemSeparatorComponent={ServiceSeparator}
-            />
-          ) : (
-            <Text style={styles.emptyText}>No service types added yet.</Text>
-          )}
-        </Card.Content>
-      </Card>
+        ) : null}
+      </BottomSheetModule>
 
-      <Card mode="outlined" style={styles.card}>
-        <Card.Content>
-          <Text style={styles.cardTitle}>Balance Card Display</Text>
-          <RadioButton.Group
-            onValueChange={updateBalanceDisplay}
-            value={balanceDisplay}>
-            <RadioOption
-              label="Show Sales and Services separately"
-              value="separate"
-            />
-            <RadioOption
-              label="Combine Sales and Services together"
-              value="combined"
-            />
-            <RadioOption label="Show Services only" value="services_only" />
-          </RadioButton.Group>
-        </Card.Content>
-      </Card>
-
-      <Card mode="outlined" style={styles.card}>
-        <Card.Content>
-          <Text style={styles.cardTitle}>Profit Calculation Method</Text>
-          <RadioButton.Group
-            onValueChange={updateExpenseAllocation}
-            value={expenseAllocation}>
-            <RadioOption
-              label="All expenses apply to total business"
-              value="combined"
-            />
-            <RadioOption
-              label="Split expenses between Sales and Services"
-              value="split"
-            />
-          </RadioButton.Group>
-          {expenseAllocation === 'split' ? (
-            <View style={styles.percentPanel}>
-              <TextInput
-                mode="outlined"
-                label="Sales percentage"
-                value={salesPercent}
-                onChangeText={updateSalesPercent}
-                keyboardType="decimal-pad"
-                style={styles.percentInput}
-              />
-              <TextInput
-                mode="outlined"
-                label="Services percentage"
-                value={servicesPercent}
-                onChangeText={updateServicesPercent}
-                keyboardType="decimal-pad"
-                style={styles.percentInput}
-              />
-              {errors.allocation ? (
-                <Text style={styles.errorText}>{errors.allocation}</Text>
-              ) : null}
-            </View>
-          ) : null}
-        </Card.Content>
-      </Card>
-
-      {errors.form ? <Text style={styles.errorText}>{errors.form}</Text> : null}
-      {isLoading ? (
-        <Text style={styles.loadingText}>Refreshing settings...</Text>
-      ) : null}
-
+      {/* ═══════════ SNACKBAR ═══════════ */}
       <Snackbar
         visible={Boolean(message)}
         onDismiss={() => setMessage('')}
         duration={1600}>
         {message}
       </Snackbar>
-    </ScrollView>
+    </View>
   );
 }
 
-function RadioOption({label, value}) {
-  return (
-    <RadioButton.Item
-      label={label}
-      value={value}
-      labelStyle={styles.radioLabel}
-      style={styles.radioItem}
-      position="leading"
-    />
-  );
-}
-
+/* ═══════════════════════════════════════════════════════════════
+   STYLES
+   ═══════════════════════════════════════════════════════════════ */
 const styles = StyleSheet.create({
-  container: {
+  /* Screen root */
+  screenRoot: {
     backgroundColor: COLORS.background,
+    flex: 1,
+  },
+  container: {
     flex: 1,
   },
   content: {
@@ -335,6 +510,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     width: '100%',
   },
+
+  /* Header */
   header: {
     paddingBottom: 16,
     paddingTop: 30,
@@ -362,18 +539,117 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginTop: 4,
   },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    marginBottom: 16,
+
+  /* Section label */
+  sectionLabel: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginBottom: 8,
+    marginTop: 20,
+    textTransform: 'uppercase',
   },
-  cardTitle: {
+
+  /* List card (container for rows) */
+  listCard: {
+    ...cardShadow,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+
+  /* Settings Row */
+  settingsRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  settingsRowText: {
+    flex: 1,
+  },
+  settingsRowTitle: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  settingsRowSub: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  rowDivider: {
+    marginLeft: 74,
+  },
+
+  /* Bottom-sheet module */
+  backdrop: {
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  sheetContainer: {
+    bottom: 80,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    alignItems: 'center',
+  },
+  sheetCard: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    maxHeight: 480,
+    maxWidth: 448,
+    width: '100%',
+    ...cardShadow,
+    elevation: 12,
+    shadowOpacity: 0.18,
+  },
+  sheetHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  sheetTitle: {
     color: COLORS.text,
     fontFamily: FONT_FAMILY,
     fontSize: 18,
     fontWeight: '800',
-    marginBottom: 10,
   },
+  sheetClose: {
+    alignItems: 'center',
+    backgroundColor: COLORS.secondary,
+    borderRadius: 12,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  sheetDivider: {
+    marginHorizontal: 20,
+  },
+  sheetBody: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    paddingTop: 12,
+  },
+
+  /* Service types module internals */
   addRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -409,6 +685,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+
+  /* Radio options */
   radioItem: {
     paddingHorizontal: 0,
   },
@@ -417,6 +695,8 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY,
     fontSize: 14,
   },
+
+  /* Percent split panel */
   percentPanel: {
     backgroundColor: COLORS.primaryPale,
     borderRadius: 8,
@@ -427,6 +707,8 @@ const styles = StyleSheet.create({
   percentInput: {
     backgroundColor: COLORS.surface,
   },
+
+  /* Misc */
   emptyText: {
     color: COLORS.muted,
     fontFamily: FONT_FAMILY,

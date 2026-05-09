@@ -1,24 +1,82 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {ChevronRight, Package, Search} from 'lucide-react-native';
-import {Text} from 'react-native-paper';
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Package,
+  PackagePlus,
+  Search,
+  X,
+} from 'lucide-react-native';
+import {Modal, Portal, Snackbar, Text} from 'react-native-paper';
+import {format, formatISO, isValid, parseISO} from 'date-fns';
 import {getDBConnection} from '../database/db';
-import {formatCurrency, getRowsArray} from '../utils/helpers';
+import {
+  formatCurrency,
+  generateId,
+  getCurrentTimestamp,
+  getRowsArray,
+} from '../utils/helpers';
+import {
+  appendPurchaseBatch,
+  calculateWeightedAverageCost,
+  serializePurchaseBatches,
+} from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
-import {IconBubble, ScreenHeader, SurfaceCard, gradientStyle, type} from '../components/KoboUI';
+import {
+  IconBubble,
+  KoboButton,
+  ScreenHeader,
+  SurfaceCard,
+  gradientStyle,
+  type,
+} from '../components/KoboUI';
+
+const formatDateInput = date => format(date, 'yyyy-MM-dd');
+
+const createDateFromInput = value => {
+  const date = parseISO(value);
+
+  if (!isValid(date) || formatDateInput(date) !== value) {
+    return null;
+  }
+
+  return date;
+};
+
+const createRestockForm = product => ({
+  quantity: '',
+  unitCost:
+    product?.purchase_price !== undefined && product?.purchase_price !== null
+      ? String(product.purchase_price)
+      : product?.cost_price !== undefined && product?.cost_price !== null
+      ? String(product.cost_price)
+      : '',
+  date: formatDateInput(new Date()),
+});
 
 function InventoryScreen({navigation}) {
   const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
+  const [isPurchaseSheetOpen, setIsPurchaseSheetOpen] = useState(false);
+  const [restockForm, setRestockForm] = useState(createRestockForm());
+  const [errors, setErrors] = useState({});
+  const [isSavingPurchase, setIsSavingPurchase] = useState(false);
+  const [message, setMessage] = useState('');
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
@@ -58,14 +116,207 @@ function InventoryScreen({navigation}) {
       const matchesFilter =
         filter === 'all' || (filter === 'low' ? isLow : !isLow);
       const matchesSearch =
-        !query || String(product.name || '').toLowerCase().includes(query);
+        !query ||
+        String(product.name || '')
+          .toLowerCase()
+          .includes(query);
 
       return matchesFilter && matchesSearch;
     });
   }, [filter, products, searchQuery]);
 
   const navigateToProductForm = product => {
+    setIsActionSheetOpen(false);
+    setIsPurchaseSheetOpen(false);
     navigation.navigate('AddEditProduct', product ? {product} : undefined);
+  };
+
+  const openProductActions = product => {
+    setSelectedProduct(product);
+    setRestockForm(createRestockForm(product));
+    setErrors({});
+    setIsActionSheetOpen(true);
+  };
+
+  const closeProductActions = () => {
+    setIsActionSheetOpen(false);
+    setErrors({});
+  };
+
+  const openPurchaseSheet = () => {
+    setRestockForm(createRestockForm(selectedProduct));
+    setErrors({});
+    setIsActionSheetOpen(false);
+    setIsPurchaseSheetOpen(true);
+  };
+
+  const closePurchaseSheet = () => {
+    setIsPurchaseSheetOpen(false);
+    setErrors({});
+  };
+
+  const updateRestockField = (field, value) => {
+    setRestockForm(current => ({...current, [field]: value}));
+    setErrors(current => ({...current, [field]: '', form: ''}));
+  };
+
+  const shiftRestockDate = days => {
+    const baseDate = createDateFromInput(restockForm.date) || new Date();
+    const nextDate = new Date(baseDate);
+    nextDate.setDate(baseDate.getDate() + days);
+    updateRestockField('date', formatDateInput(nextDate));
+  };
+
+  const validateRestock = () => {
+    const nextErrors = {};
+    const quantity = Number(restockForm.quantity || 0);
+    const unitCost = Number(restockForm.unitCost || 0);
+    const purchaseDate = createDateFromInput(restockForm.date);
+
+    if (!selectedProduct) {
+      nextErrors.form = 'Select a product before restocking.';
+    }
+
+    if (!restockForm.quantity.trim()) {
+      nextErrors.quantity = 'Quantity is required.';
+    } else if (!/^\d+$/.test(restockForm.quantity.trim()) || quantity <= 0) {
+      nextErrors.quantity =
+        'Quantity must be a whole number greater than zero.';
+    }
+
+    if (!restockForm.unitCost.trim()) {
+      nextErrors.unitCost = 'Unit cost is required.';
+    } else if (
+      !/^\d+(\.\d+)?$/.test(restockForm.unitCost.trim()) ||
+      unitCost <= 0
+    ) {
+      nextErrors.unitCost =
+        'Unit cost must be a valid number greater than zero.';
+    }
+
+    if (!restockForm.date.trim()) {
+      nextErrors.date = 'Date is required.';
+    } else if (!purchaseDate) {
+      nextErrors.date = 'Use a valid date in YYYY-MM-DD format.';
+    } else if (purchaseDate > new Date()) {
+      nextErrors.date = 'Purchase date cannot be in the future.';
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSavePurchase = async () => {
+    if (!validateRestock()) {
+      return;
+    }
+
+    setIsSavingPurchase(true);
+    try {
+      const db = await getDBConnection();
+      const quantity = Number(restockForm.quantity || 0);
+      const unitCost = Number(restockForm.unitCost || 0);
+      const totalAmount = quantity * unitCost;
+      const parsedDate = createDateFromInput(restockForm.date);
+      const now = new Date();
+      const purchaseDate = formatISO(
+        new Date(
+          parsedDate.getFullYear(),
+          parsedDate.getMonth(),
+          parsedDate.getDate(),
+          now.getHours(),
+          now.getMinutes(),
+          now.getSeconds(),
+          now.getMilliseconds(),
+        ),
+      );
+      const updatedAt = getCurrentTimestamp();
+      const currentQuantity = Number(selectedProduct.quantity || 0);
+      const nextQuantity = currentQuantity + quantity;
+      const weightedAverageCost = calculateWeightedAverageCost({
+        currentQuantity,
+        currentWeightedAverageCost: selectedProduct.weighted_average_cost,
+        fallbackUnitCost:
+          selectedProduct.purchase_price || selectedProduct.cost_price || 0,
+        purchaseQuantity: quantity,
+        purchaseUnitCost: unitCost,
+      });
+      const purchaseBatches = appendPurchaseBatch(selectedProduct, {
+        quantity,
+        unitCost,
+        date: purchaseDate,
+      });
+      const serializedPurchaseBatches =
+        serializePurchaseBatches(purchaseBatches);
+
+      await new Promise((resolve, reject) => {
+        db.transaction(
+          tx => {
+            tx.executeSql(
+              `UPDATE products
+               SET quantity = ?,
+                   cost_price = ?,
+                   purchase_price = ?,
+                   weighted_average_cost = ?,
+                   purchase_batches = ?,
+                   updated_at = ?,
+                   synced = 0
+               WHERE id = ?;`,
+              [
+                nextQuantity,
+                unitCost,
+                unitCost,
+                weightedAverageCost,
+                serializedPurchaseBatches,
+                updatedAt,
+                selectedProduct.id,
+              ],
+            );
+            tx.executeSql(
+              `INSERT INTO expenses (
+                 id,
+                 category,
+                 description,
+                 amount,
+                 date,
+                 synced
+               ) VALUES (?, ?, ?, ?, ?, ?);`,
+              [
+                generateId(),
+                'Stock Purchase',
+                `Restock: ${selectedProduct.name} (${quantity} units)`,
+                totalAmount,
+                purchaseDate,
+                0,
+              ],
+            );
+          },
+          error => reject(error),
+          () => resolve(),
+        );
+      });
+
+      setMessage(`Inventory Updated +${quantity}`);
+      setSelectedProduct(current =>
+        current
+          ? {
+              ...current,
+              quantity: nextQuantity,
+              cost_price: unitCost,
+              purchase_price: unitCost,
+              weighted_average_cost: weightedAverageCost,
+              purchase_batches: serializedPurchaseBatches,
+              updated_at: updatedAt,
+            }
+          : current,
+      );
+      closePurchaseSheet();
+      await loadProducts();
+    } catch (error) {
+      setErrors({form: 'Unable to save purchase. Please try again.'});
+    } finally {
+      setIsSavingPurchase(false);
+    }
   };
 
   const filters = [
@@ -73,6 +324,9 @@ function InventoryScreen({navigation}) {
     {key: 'low', label: 'Low', count: counts.low},
     {key: 'ok', label: 'OK', count: counts.ok},
   ];
+  const restockTotal =
+    Number(restockForm.quantity || 0) * Number(restockForm.unitCost || 0);
+  const isBackgroundLocked = isActionSheetOpen || isPurchaseSheetOpen;
 
   const renderProduct = ({item}) => {
     const isLowStock =
@@ -81,7 +335,7 @@ function InventoryScreen({navigation}) {
     return (
       <TouchableOpacity
         activeOpacity={0.84}
-        onPress={() => navigateToProductForm(item)}>
+        onPress={() => openProductActions(item)}>
         <SurfaceCard style={styles.productCard}>
           <IconBubble tone={isLowStock ? 'danger' : 'primary'} size={46}>
             <Package
@@ -141,11 +395,9 @@ function InventoryScreen({navigation}) {
                 activeOpacity={0.84}
                 key={item.key}
                 onPress={() => setFilter(item.key)}
-                style={[
-                  styles.filterPill,
-                  active && gradientStyle('primary'),
-                ]}>
-                <Text style={[styles.filterText, active && styles.filterTextOn]}>
+                style={[styles.filterPill, active && gradientStyle('primary')]}>
+                <Text
+                  style={[styles.filterText, active && styles.filterTextOn]}>
                   {item.label} {item.count}
                 </Text>
               </TouchableOpacity>
@@ -157,6 +409,7 @@ function InventoryScreen({navigation}) {
           data={filteredProducts}
           keyExtractor={item => item.id}
           renderItem={renderProduct}
+          scrollEnabled={!isBackgroundLocked}
           refreshing={isLoading}
           onRefresh={loadProducts}
           contentContainerStyle={[
@@ -175,6 +428,196 @@ function InventoryScreen({navigation}) {
         onPress={() => navigateToProductForm()}>
         <Text style={styles.addButtonText}>+ Product</Text>
       </TouchableOpacity>
+
+      <Portal>
+        <Modal
+          visible={isActionSheetOpen}
+          onDismiss={closeProductActions}
+          contentContainerStyle={styles.bottomSheet}>
+          {selectedProduct ? (
+            <View>
+              <View style={styles.sheetHandle} />
+              <View style={styles.sheetHeader}>
+                <View style={styles.sheetTitleWrap}>
+                  <Text style={styles.sheetEyebrow}>Product</Text>
+                  <Text style={styles.sheetTitle} numberOfLines={1}>
+                    {selectedProduct.name}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.84}
+                  onPress={closeProductActions}
+                  style={styles.iconButton}>
+                  <X color={COLORS.muted} size={18} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.actionStats}>
+                <View style={styles.actionStat}>
+                  <Text style={styles.actionStatLabel}>Stock</Text>
+                  <Text style={[styles.actionStatValue, type.number]}>
+                    {selectedProduct.quantity || 0}
+                  </Text>
+                </View>
+                <View style={styles.actionStat}>
+                  <Text style={styles.actionStatLabel}>WAC</Text>
+                  <Text style={[styles.actionStatValue, type.number]}>
+                    {formatCurrency(
+                      selectedProduct.weighted_average_cost ||
+                        selectedProduct.purchase_price ||
+                        selectedProduct.cost_price ||
+                        0,
+                    )}
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={openPurchaseSheet}
+                style={[styles.purchaseButton, gradientStyle('success')]}>
+                <PackagePlus
+                  color={COLORS.primaryForeground}
+                  size={20}
+                  strokeWidth={2.4}
+                />
+                <Text style={styles.purchaseButtonText}>Purchase/Restock</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.84}
+                onPress={() => navigateToProductForm(selectedProduct)}
+                style={styles.editButton}>
+                <Text style={styles.editButtonText}>Edit Product Details</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </Modal>
+
+        <Modal
+          visible={isPurchaseSheetOpen}
+          onDismiss={closePurchaseSheet}
+          contentContainerStyle={styles.purchaseSheet}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View>
+              <View style={styles.sheetHandle} />
+              <View style={styles.sheetHeader}>
+                <View style={styles.sheetTitleWrap}>
+                  <Text style={styles.sheetEyebrow}>Purchase/Restock</Text>
+                  <Text style={styles.sheetTitle} numberOfLines={1}>
+                    {selectedProduct?.name || 'Product'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.84}
+                  onPress={closePurchaseSheet}
+                  style={styles.iconButton}>
+                  <X color={COLORS.muted} size={18} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.formGrid}>
+                <View style={styles.formField}>
+                  <Text style={styles.fieldLabel}>Quantity</Text>
+                  <TextInput
+                    value={restockForm.quantity}
+                    onChangeText={value =>
+                      updateRestockField('quantity', value)
+                    }
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                    style={[
+                      styles.sheetInput,
+                      errors.quantity && styles.errorBorder,
+                    ]}
+                  />
+                  {errors.quantity ? (
+                    <Text style={styles.errorText}>{errors.quantity}</Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.formField}>
+                  <Text style={styles.fieldLabel}>Unit Cost</Text>
+                  <TextInput
+                    value={restockForm.unitCost}
+                    onChangeText={value =>
+                      updateRestockField('unitCost', value)
+                    }
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={COLORS.muted}
+                    style={[
+                      styles.sheetInput,
+                      errors.unitCost && styles.errorBorder,
+                    ]}
+                  />
+                  {errors.unitCost ? (
+                    <Text style={styles.errorText}>{errors.unitCost}</Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={styles.totalPanel}>
+                <View>
+                  <Text style={styles.totalLabel}>Total Amount</Text>
+                  <Text style={[styles.totalValue, type.number]}>
+                    {formatCurrency(restockTotal)}
+                  </Text>
+                </View>
+                <Calendar color={COLORS.primary} size={22} strokeWidth={2.4} />
+              </View>
+
+              <Text style={styles.fieldLabel}>Date</Text>
+              <View style={styles.datePickerRow}>
+                <TouchableOpacity
+                  activeOpacity={0.84}
+                  onPress={() => shiftRestockDate(-1)}
+                  style={styles.dateButton}>
+                  <ChevronLeft color={COLORS.primary} size={18} />
+                </TouchableOpacity>
+                <TextInput
+                  value={restockForm.date}
+                  onChangeText={value => updateRestockField('date', value)}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={COLORS.muted}
+                  style={[styles.dateInput, errors.date && styles.errorBorder]}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.84}
+                  onPress={() =>
+                    updateRestockField('date', formatDateInput(new Date()))
+                  }
+                  style={styles.todayButton}>
+                  <Text style={styles.todayText}>Today</Text>
+                </TouchableOpacity>
+              </View>
+              {errors.date ? (
+                <Text style={styles.errorText}>{errors.date}</Text>
+              ) : null}
+              {errors.form ? (
+                <Text style={styles.errorText}>{errors.form}</Text>
+              ) : null}
+
+              <KoboButton
+                onPress={handleSavePurchase}
+                loading={isSavingPurchase}
+                disabled={isSavingPurchase}
+                style={styles.savePurchaseButton}>
+                Save Restock
+              </KoboButton>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </Portal>
+
+      <Snackbar
+        visible={Boolean(message)}
+        onDismiss={() => setMessage('')}
+        duration={1800}>
+        {message}
+      </Snackbar>
     </View>
   );
 }
@@ -309,6 +752,225 @@ const styles = StyleSheet.create({
     color: COLORS.primaryForeground,
     fontFamily: FONT_FAMILY,
     fontWeight: '800',
+  },
+  bottomSheet: {
+    alignSelf: 'center',
+    backgroundColor: COLORS.surface,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    bottom: 80,
+    left: 0,
+    maxWidth: 448,
+    padding: 18,
+    position: 'absolute',
+    right: 0,
+    width: '100%',
+  },
+  purchaseSheet: {
+    alignSelf: 'center',
+    backgroundColor: COLORS.surface,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    bottom: 80,
+    left: 0,
+    maxWidth: 448,
+    padding: 18,
+    position: 'absolute',
+    right: 0,
+    width: '100%',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    backgroundColor: COLORS.line,
+    borderRadius: 3,
+    height: 5,
+    marginBottom: 14,
+    width: 44,
+  },
+  sheetHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  sheetTitleWrap: {
+    flex: 1,
+  },
+  sheetEyebrow: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  sheetTitle: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  iconButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.secondary,
+    borderRadius: 16,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  actionStats: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  actionStat: {
+    backgroundColor: COLORS.primaryPale,
+    borderRadius: 18,
+    flex: 1,
+    minHeight: 76,
+    padding: 12,
+  },
+  actionStatLabel: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  actionStatValue: {
+    color: COLORS.primary,
+    fontSize: 18,
+    marginTop: 7,
+  },
+  purchaseButton: {
+    alignItems: 'center',
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 9,
+    justifyContent: 'center',
+    minHeight: 56,
+    paddingHorizontal: 18,
+  },
+  purchaseButtonText: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  editButton: {
+    alignItems: 'center',
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 10,
+    minHeight: 50,
+  },
+  editButtonText: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontWeight: '800',
+  },
+  formGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  formField: {
+    flex: 1,
+  },
+  fieldLabel: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 7,
+  },
+  sheetInput: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 16,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    width: '100%',
+  },
+  totalPanel: {
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryPale,
+    borderRadius: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    padding: 14,
+  },
+  totalLabel: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  totalValue: {
+    color: COLORS.primary,
+    fontSize: 24,
+    marginTop: 4,
+  },
+  datePickerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dateButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 16,
+    height: 48,
+    justifyContent: 'center',
+    width: 44,
+  },
+  dateInput: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    flex: 1,
+    fontFamily: FONT_FAMILY,
+    minHeight: 50,
+    paddingHorizontal: 12,
+  },
+  todayButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 16,
+    height: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  todayText: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  savePurchaseButton: {
+    marginTop: 16,
+  },
+  errorBorder: {
+    borderColor: COLORS.danger,
+  },
+  errorText: {
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    marginTop: 6,
   },
 });
 

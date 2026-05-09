@@ -1,14 +1,15 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, TouchableOpacity, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useFocusEffect} from '@react-navigation/native';
 import {useDispatch, useSelector} from 'react-redux';
 import {
+  Activity,
   ArrowUpRight,
-  CreditCard,
   Package,
   ShoppingBag,
   Sparkles,
+  TrendingDown,
   Wallet,
 } from 'lucide-react-native';
 import {Text} from 'react-native-paper';
@@ -20,7 +21,6 @@ import {COLORS, FONT_FAMILY} from '../theme/theme';
 import {
   HeroCard,
   IconBubble,
-  ScreenHeader,
   SurfaceCard,
   gradientStyle,
   type,
@@ -42,7 +42,25 @@ const getDateRange = () => {
     59,
     999,
   ).toISOString();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const startOfYesterday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - 1,
+  ).toISOString();
+  const endOfYesterday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - 1,
+    23,
+    59,
+    59,
+    999,
+  ).toISOString();
+  const startOfMonth = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1,
+  ).toISOString();
   const endOfMonth = new Date(
     now.getFullYear(),
     now.getMonth() + 1,
@@ -53,7 +71,26 @@ const getDateRange = () => {
     999,
   ).toISOString();
 
-  return {startOfToday, endOfToday, startOfMonth, endOfMonth};
+  return {
+    startOfToday,
+    endOfToday,
+    startOfYesterday,
+    endOfYesterday,
+    startOfMonth,
+    endOfMonth,
+  };
+};
+
+const calcChange = (current, previous) => {
+  if (!previous || previous === 0) {
+    return current > 0 ? {percent: 100, direction: 'up'} : null;
+  }
+
+  const percent = ((current - previous) / Math.abs(previous)) * 100;
+  return {
+    percent: Math.abs(Math.round(percent * 10) / 10),
+    direction: percent >= 0 ? 'up' : 'down',
+  };
 };
 
 function DashboardScreen({navigation}) {
@@ -61,9 +98,14 @@ function DashboardScreen({navigation}) {
   const user = useSelector(state => state.auth.user);
   const [summary, setSummary] = useState({
     todaySales: 0,
-    monthSales: 0,
-    monthExpenses: 0,
-    netProfit: 0,
+    todayServices: 0,
+    todayExpenses: 0,
+    todayNetProfit: 0,
+    yesterdaySales: 0,
+    yesterdayServices: 0,
+    yesterdayExpenses: 0,
+    yesterdayNetProfit: 0,
+    inventoryValue: 0,
     lowStockCount: 0,
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -72,44 +114,85 @@ function DashboardScreen({navigation}) {
     setIsLoading(true);
     try {
       const db = await getDBConnection();
-      const {startOfToday, endOfToday, startOfMonth, endOfMonth} =
+      const {startOfToday, endOfToday, startOfYesterday, endOfYesterday} =
         getDateRange();
 
       const [todaySalesResult] = await db.executeSql(
         'SELECT COALESCE(SUM(total), 0) AS total FROM sales WHERE date BETWEEN ? AND ?;',
         [startOfToday, endOfToday],
       );
-      const [monthSalesResult] = await db.executeSql(
-        'SELECT COALESCE(SUM(total), 0) AS total FROM sales WHERE date BETWEEN ? AND ?;',
-        [startOfMonth, endOfMonth],
+      const [todayServicesResult] = await db.executeSql(
+        'SELECT COALESCE(SUM(amount), 0) AS total FROM services WHERE date BETWEEN ? AND ?;',
+        [startOfToday, endOfToday],
       );
-      const [monthExpensesResult] = await db.executeSql(
+      const [todayExpensesResult] = await db.executeSql(
         'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date BETWEEN ? AND ?;',
-        [startOfMonth, endOfMonth],
+        [startOfToday, endOfToday],
+      );
+      const [yesterdaySalesResult] = await db.executeSql(
+        'SELECT COALESCE(SUM(total), 0) AS total FROM sales WHERE date BETWEEN ? AND ?;',
+        [startOfYesterday, endOfYesterday],
+      );
+      const [yesterdayServicesResult] = await db.executeSql(
+        'SELECT COALESCE(SUM(amount), 0) AS total FROM services WHERE date BETWEEN ? AND ?;',
+        [startOfYesterday, endOfYesterday],
+      );
+      const [yesterdayExpensesResult] = await db.executeSql(
+        'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date BETWEEN ? AND ?;',
+        [startOfYesterday, endOfYesterday],
       );
       const [lowStockResult] = await db.executeSql(
         `SELECT id FROM products
          WHERE COALESCE(quantity, 0) < COALESCE(min_threshold, 0);`,
       );
+      const [inventoryValueResult] = await db.executeSql(
+        `SELECT COALESCE(SUM(COALESCE(weighted_average_cost, purchase_price, cost_price, 0) * COALESCE(quantity, 0)), 0) AS total
+         FROM products;`,
+      );
 
       const todaySales = Number(todaySalesResult.rows.item(0).total || 0);
-      const monthSales = Number(monthSalesResult.rows.item(0).total || 0);
-      const monthExpenses = Number(monthExpensesResult.rows.item(0).total || 0);
+      const todayServices = Number(todayServicesResult.rows.item(0).total || 0);
+      const todayExpenses = Number(todayExpensesResult.rows.item(0).total || 0);
+      const yesterdaySales = Number(
+        yesterdaySalesResult.rows.item(0).total || 0,
+      );
+      const yesterdayServices = Number(
+        yesterdayServicesResult.rows.item(0).total || 0,
+      );
+      const yesterdayExpenses = Number(
+        yesterdayExpensesResult.rows.item(0).total || 0,
+      );
+      const inventoryValue = Number(
+        inventoryValueResult.rows.item(0).total || 0,
+      );
       const lowStock = getRowsArray(lowStockResult);
+      const todayNetProfit = todaySales + todayServices - todayExpenses;
+      const yesterdayNetProfit =
+        yesterdaySales + yesterdayServices - yesterdayExpenses;
 
       setSummary({
         todaySales,
-        monthSales,
-        monthExpenses,
-        netProfit: monthSales - monthExpenses,
+        todayServices,
+        todayExpenses,
+        todayNetProfit,
+        yesterdaySales,
+        yesterdayServices,
+        yesterdayExpenses,
+        yesterdayNetProfit,
+        inventoryValue,
         lowStockCount: lowStock.length,
       });
     } catch (error) {
       setSummary({
         todaySales: 0,
-        monthSales: 0,
-        monthExpenses: 0,
-        netProfit: 0,
+        todayServices: 0,
+        todayExpenses: 0,
+        todayNetProfit: 0,
+        yesterdaySales: 0,
+        yesterdayServices: 0,
+        yesterdayExpenses: 0,
+        yesterdayNetProfit: 0,
+        inventoryValue: 0,
         lowStockCount: 0,
       });
     } finally {
@@ -122,6 +205,12 @@ function DashboardScreen({navigation}) {
       loadDashboardData();
     }, [loadDashboardData]),
   );
+
+  useEffect(() => {
+    const interval = setInterval(loadDashboardData, 60000);
+
+    return () => clearInterval(interval);
+  }, [loadDashboardData]);
 
   const handleLogout = async () => {
     await AsyncStorage.multiRemove([
@@ -155,40 +244,32 @@ function DashboardScreen({navigation}) {
 
   const stats = [
     {
-      label: 'Sales today',
+      label: 'Sales',
       value: formatCurrency(summary.todaySales),
       icon: ShoppingBag,
       tone: 'success',
-      delta: '+ local',
+      change: calcChange(summary.todaySales, summary.yesterdaySales),
     },
     {
-      label: 'Sales this month',
-      value: formatCurrency(summary.monthSales),
-      icon: CreditCard,
+      label: 'Services',
+      value: formatCurrency(summary.todayServices),
+      icon: Activity,
       tone: 'primary',
-      delta: 'month',
+      change: calcChange(summary.todayServices, summary.yesterdayServices),
     },
     {
-      label: 'Expenses this month',
-      value: formatCurrency(summary.monthExpenses),
+      label: 'Expenses',
+      value: formatCurrency(summary.todayExpenses),
       icon: Wallet,
       tone: 'danger',
-      delta: 'tracked',
+      change: calcChange(summary.todayExpenses, summary.yesterdayExpenses),
     },
     {
       label: 'Net profit',
-      value: formatCurrency(summary.netProfit),
+      value: formatCurrency(summary.todayNetProfit),
       icon: ArrowUpRight,
-      tone: summary.netProfit >= 0 ? 'success' : 'danger',
-      highlighted: true,
-      delta: summary.netProfit >= 0 ? 'profit' : 'loss',
-    },
-    {
-      label: 'Low stock items',
-      value: String(summary.lowStockCount),
-      icon: Package,
-      tone: 'warning',
-      delta: 'watch',
+      tone: summary.todayNetProfit >= 0 ? 'success' : 'danger',
+      change: calcChange(summary.todayNetProfit, summary.yesterdayNetProfit),
     },
   ];
 
@@ -214,12 +295,15 @@ function DashboardScreen({navigation}) {
             <Text style={styles.heroEyebrow}>TOTAL BALANCE</Text>
           </View>
           <Text style={[styles.heroAmount, type.number]}>
-            {formatCurrency(summary.netProfit)}
+            {formatCurrency(summary.todayNetProfit)}
           </Text>
-          <View style={styles.heroDelta}>
-            <ArrowUpRight color={COLORS.primaryForeground} size={15} />
-            <Text style={styles.heroDeltaText}>+12.4% vs last month</Text>
-          </View>
+          <ComparisonChip
+            change={calcChange(
+              summary.todayNetProfit,
+              summary.yesterdayNetProfit,
+            )}
+            glass
+          />
         </HeroCard>
 
         <View style={styles.quickGrid}>
@@ -244,51 +328,100 @@ function DashboardScreen({navigation}) {
           })}
         </View>
 
-        <ScreenHeader eyebrow="Today" title="Pulse" />
-
-        <View style={styles.statsList}>
-          {stats.map(item => {
-            const StatIcon = item.icon;
-            return (
-              <SurfaceCard
-                key={item.label}
-                style={[styles.statCard, item.highlighted && styles.statLift]}>
-                <IconBubble
-                  gradient={item.highlighted}
-                  tone={item.tone}
-                  size={46}>
-                  <StatIcon
-                    color={
-                      item.highlighted
-                        ? COLORS.primaryForeground
-                        : item.tone === 'success'
-                        ? COLORS.success
-                        : item.tone === 'danger'
-                        ? COLORS.danger
-                        : item.tone === 'warning'
-                        ? COLORS.warning
-                        : COLORS.primary
-                    }
-                    size={21}
-                    strokeWidth={2.4}
-                  />
-                </IconBubble>
-                <View style={styles.statBody}>
-                  <Text style={styles.statLabel}>{item.label}</Text>
-                  <Text style={[styles.statValue, type.number]}>
-                    {item.value}
-                  </Text>
-                </View>
-                <View style={styles.deltaChip}>
-                  <Text style={styles.deltaText}>{item.delta}</Text>
-                </View>
-              </SurfaceCard>
-            );
-          })}
+        <View style={styles.statsGrid}>
+          {stats.map(item => (
+            <DailyMetricCard key={item.label} item={item} />
+          ))}
         </View>
 
-        {isLoading ? <Text style={styles.loading}>Refreshing local data...</Text> : null}
+        <SurfaceCard style={styles.inventoryCard}>
+          <View>
+            <Text style={styles.statLabel}>Inventory value</Text>
+            <Text style={[styles.inventoryValue, type.number]}>
+              {formatCurrency(summary.inventoryValue)}
+            </Text>
+          </View>
+          <IconBubble tone="primary" size={42}>
+            <Package color={COLORS.primary} size={19} strokeWidth={2.4} />
+          </IconBubble>
+        </SurfaceCard>
+
+        {isLoading ? (
+          <Text style={styles.loading}>Refreshing local data...</Text>
+        ) : null}
       </ScrollView>
+    </View>
+  );
+}
+
+function DailyMetricCard({item}) {
+  const StatIcon = item.icon;
+  const amountTone =
+    item.tone === 'danger'
+      ? COLORS.danger
+      : item.tone === 'success'
+      ? COLORS.success
+      : COLORS.text;
+
+  return (
+    <SurfaceCard style={styles.dailyCard}>
+      <View style={styles.dailyCardHead}>
+        <Text style={styles.statLabel}>{item.label}</Text>
+        <StatIcon
+          color={
+            item.tone === 'danger'
+              ? COLORS.danger
+              : item.tone === 'success'
+              ? COLORS.success
+              : COLORS.primary
+          }
+          size={18}
+          strokeWidth={2.5}
+        />
+      </View>
+      <Text style={[styles.dailyValue, type.number, {color: amountTone}]}>
+        {item.value}
+      </Text>
+      <ComparisonChip change={item.change} />
+    </SurfaceCard>
+  );
+}
+
+function ComparisonChip({change, glass = false}) {
+  if (!change) {
+    return null;
+  }
+
+  const isUp = change.direction === 'up';
+  const Icon = isUp ? ArrowUpRight : TrendingDown;
+
+  return (
+    <View
+      style={[
+        styles.comparisonChip,
+        isUp ? styles.comparisonUp : styles.comparisonDown,
+        glass && styles.comparisonGlass,
+      ]}>
+      <Icon
+        color={
+          glass
+            ? COLORS.primaryForeground
+            : isUp
+            ? COLORS.success
+            : COLORS.danger
+        }
+        size={12}
+        strokeWidth={2.7}
+      />
+      <Text
+        style={[
+          styles.comparisonText,
+          isUp ? styles.comparisonTextUp : styles.comparisonTextDown,
+          glass && styles.comparisonTextGlass,
+        ]}>
+        {isUp ? '+' : '-'}
+        {change.percent}% vs prev
+      </Text>
     </View>
   );
 }
@@ -372,22 +505,59 @@ const styles = StyleSheet.create({
     lineHeight: 54,
     marginTop: 16,
   },
-  heroDelta: {
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
+  },
+  dailyCard: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 108,
+    padding: 14,
+  },
+  dailyCardHead: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dailyValue: {
+    fontSize: 21,
+    marginTop: 10,
+  },
+  comparisonChip: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: COLORS.glassStrong,
     borderRadius: 999,
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 10,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    gap: 4,
+    marginTop: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
-  heroDeltaText: {
-    color: COLORS.primaryForeground,
+  comparisonUp: {
+    backgroundColor: COLORS.successSoft,
+  },
+  comparisonDown: {
+    backgroundColor: COLORS.dangerSoft,
+  },
+  comparisonGlass: {
+    backgroundColor: COLORS.glassStrong,
+  },
+  comparisonText: {
     fontFamily: FONT_FAMILY,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '800',
+  },
+  comparisonTextUp: {
+    color: COLORS.success,
+  },
+  comparisonTextDown: {
+    color: COLORS.danger,
+  },
+  comparisonTextGlass: {
+    color: COLORS.primaryForeground,
   },
   quickGrid: {
     flexDirection: 'row',
@@ -411,20 +581,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 10,
   },
-  statsList: {
-    gap: 12,
-  },
-  statCard: {
+  inventoryCard: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 8,
     padding: 14,
-  },
-  statLift: {
-    borderColor: COLORS.primarySoft,
-  },
-  statBody: {
-    flex: 1,
   },
   statLabel: {
     color: COLORS.muted,
@@ -432,22 +594,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  statValue: {
+  inventoryValue: {
     color: COLORS.text,
-    fontSize: 20,
+    fontSize: 22,
     marginTop: 3,
-  },
-  deltaChip: {
-    backgroundColor: COLORS.successSoft,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  deltaText: {
-    color: COLORS.success,
-    fontFamily: FONT_FAMILY,
-    fontSize: 11,
-    fontWeight: '800',
   },
   loading: {
     color: COLORS.muted,

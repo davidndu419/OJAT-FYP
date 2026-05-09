@@ -45,6 +45,9 @@ export const initDatabase = async () => {
       name TEXT NOT NULL,
       category TEXT,
       cost_price REAL,
+      purchase_price REAL,
+      weighted_average_cost REAL,
+      purchase_batches TEXT,
       selling_price REAL,
       quantity INTEGER,
       min_threshold INTEGER,
@@ -53,12 +56,17 @@ export const initDatabase = async () => {
     );
   `);
 
+  await addColumnIfMissing(db, 'products', 'purchase_price REAL');
+  await addColumnIfMissing(db, 'products', 'weighted_average_cost REAL');
+  await addColumnIfMissing(db, 'products', 'purchase_batches TEXT');
+
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS sales (
       id TEXT PRIMARY KEY,
       product_id TEXT,
       quantity INTEGER,
       total REAL,
+      cogs REAL,
       date TEXT,
       synced INTEGER DEFAULT 0
     );
@@ -69,6 +77,7 @@ export const initDatabase = async () => {
     'sales',
     "payment_method TEXT NOT NULL DEFAULT 'cash'",
   );
+  await addColumnIfMissing(db, 'sales', 'cogs REAL');
 
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS expenses (
@@ -104,11 +113,7 @@ export const initDatabase = async () => {
   `);
 
   await addColumnIfMissing(db, 'service_types', 'updated_at TEXT');
-  await addColumnIfMissing(
-    db,
-    'service_types',
-    'synced INTEGER DEFAULT 0',
-  );
+  await addColumnIfMissing(db, 'service_types', 'synced INTEGER DEFAULT 0');
 
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS daily_balance (
@@ -144,6 +149,14 @@ export const initDatabase = async () => {
   await db.executeSql(
     'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?);',
     ['services_expense_percent', '40'],
+  );
+  await db.executeSql(
+    'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?);',
+    ['business_name', 'TradeEase Business'],
+  );
+  await db.executeSql(
+    'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?);',
+    ['business_tin', 'Not provided'],
   );
 
   await resetBalanceIfNewDay();
