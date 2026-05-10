@@ -11,6 +11,7 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import {
   Calendar,
+  Check,
   ChevronLeft,
   ChevronRight,
   Package,
@@ -35,6 +36,7 @@ import {
 } from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
 import {
+  HeroCard,
   IconBubble,
   KoboButton,
   ScreenHeader,
@@ -81,6 +83,8 @@ function InventoryScreen({navigation}) {
   const [errors, setErrors] = useState({});
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [message, setMessage] = useState('');
+  const [dateRange, setDateRange] = useState('today'); // for consistency
+  const [dateModuleOpen, setDateModuleOpen] = useState(false);
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
@@ -104,6 +108,7 @@ function InventoryScreen({navigation}) {
       const closeAllListener = () => {
         setIsActionSheetOpen(false);
         setIsPurchaseSheetOpen(false);
+        setDateModuleOpen(false);
         setMessage('');
       };
 
@@ -113,6 +118,7 @@ function InventoryScreen({navigation}) {
         globalEvents.off(EVENT_CLOSE_ALL_MODALS, closeAllListener);
         setIsActionSheetOpen(false);
         setIsPurchaseSheetOpen(false);
+        setDateModuleOpen(false);
         setMessage('');
       };
     }, [loadProducts]),
@@ -123,7 +129,15 @@ function InventoryScreen({navigation}) {
       item => Number(item.quantity || 0) < Number(item.min_threshold || 0),
     ).length;
 
-    return {all: products.length, low, ok: products.length - low};
+    const totalValue = products.reduce((acc, item) => {
+      const cost = Number(
+        item.weighted_average_cost || item.purchase_price || item.cost_price || 0,
+      );
+      const qty = Number(item.quantity || 0);
+      return acc + cost * qty;
+    }, 0);
+
+    return {all: products.length, low, ok: products.length - low, totalValue};
   }, [products]);
 
   const filteredProducts = useMemo(() => {
@@ -392,6 +406,21 @@ function InventoryScreen({navigation}) {
     <View style={styles.container}>
       <View style={styles.shell}>
         <ScreenHeader eyebrow="Inventory" title="Stock" />
+        <HeroCard style={{marginBottom: 20}}>
+          <View style={styles.heroTop}>
+            <Text style={styles.heroEyebrow}>Total Inventory Value</Text>
+            <TouchableOpacity 
+              activeOpacity={0.7}
+              onPress={() => setDateModuleOpen(true)}
+              style={styles.dateSelector}>
+              <Calendar color={COLORS.primaryForeground} size={16} />
+              <Text style={styles.dateText}>
+                {dateRange === 'today' ? 'Today' : dateRange === 'yesterday' ? 'Yesterday' : 'This Month'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.heroAmount, type.number]}>{formatCurrency(counts.totalValue)}</Text>
+        </HeroCard>
 
         <View style={styles.searchWrap}>
           <Search
@@ -443,6 +472,39 @@ function InventoryScreen({navigation}) {
           }
         />
       </View>
+
+      <BottomSheetModule
+        isOpen={dateModuleOpen}
+        onClose={() => setDateModuleOpen(false)}
+        title="Select Range">
+        <View style={styles.dateOptions}>
+          {[
+            { label: 'Today', value: 'today' },
+            { label: 'Yesterday', value: 'yesterday' },
+            { label: 'This Month', value: 'month' },
+          ].map(opt => (
+            <TouchableOpacity
+              key={opt.value}
+              activeOpacity={0.7}
+              onPress={() => {
+                setDateRange(opt.value);
+                setDateModuleOpen(false);
+              }}
+              style={[
+                styles.dateOption,
+                dateRange === opt.value && styles.dateOptionSelected
+              ]}>
+              <Text style={[
+                styles.dateOptionText,
+                dateRange === opt.value && styles.dateOptionTextSelected
+              ]}>
+                {opt.label}
+              </Text>
+              {dateRange === opt.value && <Check color={COLORS.primary} size={20} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </BottomSheetModule>
 
       <TouchableOpacity
         activeOpacity={0.86}
@@ -959,6 +1021,69 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY,
     fontSize: 12,
     marginTop: 6,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dateSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 99,
+  },
+  dateText: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  dateOptions: {
+    gap: 8,
+    paddingBottom: 20,
+  },
+  dateOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+  },
+  dateOptionSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+  dateOptionText: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  dateOptionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '800',
+  },
+  heroEyebrow: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  heroAmount: {
+    color: COLORS.primaryForeground,
+    fontSize: 38,
+    fontWeight: '800',
+    marginTop: 12,
   },
 });
 

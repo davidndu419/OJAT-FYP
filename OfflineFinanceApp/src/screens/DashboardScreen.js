@@ -7,6 +7,8 @@ import {
   Activity,
   ArrowUpRight,
   Briefcase,
+  Calendar,
+  Check,
   Package,
   ShoppingBag,
   Sparkles,
@@ -29,58 +31,22 @@ import {BottomSheetModule} from '../components/BottomSheetModule';
 import {LuminousStatus} from '../components/LuminousStatus';
 import {globalEvents, EVENT_CLOSE_ALL_MODALS} from '../utils/events';
 
-const getDateRange = () => {
+const getDateRanges = () => {
   const now = new Date();
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).toISOString();
-  const endOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    23,
-    59,
-    59,
-    999,
-  ).toISOString();
-  const startOfYesterday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() - 1,
-  ).toISOString();
-  const endOfYesterday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() - 1,
-    23,
-    59,
-    59,
-    999,
-  ).toISOString();
-  const startOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1,
-  ).toISOString();
-  const endOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999,
-  ).toISOString();
+  
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+  
+  const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+  const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999).toISOString();
+  
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
 
   return {
-    startOfToday,
-    endOfToday,
-    startOfYesterday,
-    endOfYesterday,
-    startOfMonth,
-    endOfMonth,
+    today: { start: startOfToday, end: endOfToday },
+    yesterday: { start: startOfYesterday, end: endOfYesterday },
+    month: { start: startOfMonth, end: endOfMonth },
   };
 };
 
@@ -113,6 +79,8 @@ function DashboardScreen({navigation}) {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [businessModuleOpen, setBusinessModuleOpen] = useState(false);
+  const [dateModuleOpen, setDateModuleOpen] = useState(false);
+  const [dateRange, setDateRange] = useState('today'); // 'today' | 'yesterday' | 'month'
   const [businessName, setBusinessName] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
   const [businessPhone, setBusinessPhone] = useState('');
@@ -123,32 +91,34 @@ function DashboardScreen({navigation}) {
     setIsLoading(true);
     try {
       const db = await getDBConnection();
-      const {startOfToday, endOfToday, startOfYesterday, endOfYesterday} =
-        getDateRange();
+      const ranges = getDateRanges();
+      
+      const current = ranges[dateRange];
+      const yesterday = ranges.yesterday; // we still need yesterday for the comparison chip
 
       const [todaySalesResult] = await db.executeSql(
         'SELECT COALESCE(SUM(total), 0) AS total FROM sales WHERE date BETWEEN ? AND ?;',
-        [startOfToday, endOfToday],
+        [current.start, current.end],
       );
       const [todayServicesResult] = await db.executeSql(
         'SELECT COALESCE(SUM(amount), 0) AS total FROM services WHERE date BETWEEN ? AND ?;',
-        [startOfToday, endOfToday],
+        [current.start, current.end],
       );
       const [todayExpensesResult] = await db.executeSql(
         'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date BETWEEN ? AND ?;',
-        [startOfToday, endOfToday],
+        [current.start, current.end],
       );
       const [yesterdaySalesResult] = await db.executeSql(
         'SELECT COALESCE(SUM(total), 0) AS total FROM sales WHERE date BETWEEN ? AND ?;',
-        [startOfYesterday, endOfYesterday],
+        [yesterday.start, yesterday.end],
       );
       const [yesterdayServicesResult] = await db.executeSql(
         'SELECT COALESCE(SUM(amount), 0) AS total FROM services WHERE date BETWEEN ? AND ?;',
-        [startOfYesterday, endOfYesterday],
+        [yesterday.start, yesterday.end],
       );
       const [yesterdayExpensesResult] = await db.executeSql(
         'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date BETWEEN ? AND ?;',
-        [startOfYesterday, endOfYesterday],
+        [yesterday.start, yesterday.end],
       );
       const [lowStockResult] = await db.executeSql(
         `SELECT id FROM products
@@ -205,7 +175,7 @@ function DashboardScreen({navigation}) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [dateRange]);
 
   useFocusEffect(
     useCallback(() => {
@@ -213,6 +183,7 @@ function DashboardScreen({navigation}) {
 
       const closeAllListener = () => {
         setBusinessModuleOpen(false);
+        setDateModuleOpen(false);
         setMessage('');
       };
 
@@ -221,6 +192,7 @@ function DashboardScreen({navigation}) {
       return () => {
         globalEvents.off(EVENT_CLOSE_ALL_MODALS, closeAllListener);
         setBusinessModuleOpen(false);
+        setDateModuleOpen(false);
         setMessage('');
       };
     }, [loadDashboardData]),
@@ -327,10 +299,22 @@ function DashboardScreen({navigation}) {
         </View>
 
         <HeroCard style={styles.balanceCard}>
-          <View style={styles.heroLabelRow}>
-            <Sparkles color={COLORS.primaryForeground} size={15} />
-            <Text style={styles.heroEyebrow}>TOTAL BALANCE</Text>
+          <View style={styles.heroTop}>
+            <View style={styles.heroLabelRow}>
+              <Sparkles color={COLORS.primaryForeground} size={15} />
+              <Text style={styles.heroEyebrow}>TOTAL BALANCE</Text>
+            </View>
+            <TouchableOpacity 
+              activeOpacity={0.7}
+              onPress={() => setDateModuleOpen(true)}
+              style={styles.dateSelector}>
+              <Calendar color={COLORS.primaryForeground} size={16} />
+              <Text style={styles.dateText}>
+                {dateRange === 'today' ? 'Today' : dateRange === 'yesterday' ? 'Yesterday' : 'This Month'}
+              </Text>
+            </TouchableOpacity>
           </View>
+          
           <Text style={[styles.heroAmount, type.number]}>
             {formatCurrency(summary.todayNetProfit)}
           </Text>
@@ -426,6 +410,39 @@ function DashboardScreen({navigation}) {
             style={styles.saveButton}>
             Save Changes
           </Button>
+        </View>
+      </BottomSheetModule>
+
+      <BottomSheetModule
+        isOpen={dateModuleOpen}
+        onClose={() => setDateModuleOpen(false)}
+        title="Select Range">
+        <View style={styles.dateOptions}>
+          {[
+            { label: 'Today', value: 'today' },
+            { label: 'Yesterday', value: 'yesterday' },
+            { label: 'This Month', value: 'month' },
+          ].map(opt => (
+            <TouchableOpacity
+              key={opt.value}
+              activeOpacity={0.7}
+              onPress={() => {
+                setDateRange(opt.value);
+                setDateModuleOpen(false);
+              }}
+              style={[
+                styles.dateOption,
+                dateRange === opt.value && styles.dateOptionSelected
+              ]}>
+              <Text style={[
+                styles.dateOptionText,
+                dateRange === opt.value && styles.dateOptionTextSelected
+              ]}>
+                {opt.label}
+              </Text>
+              {dateRange === opt.value && <Check color={COLORS.primary} size={20} />}
+            </TouchableOpacity>
+          ))}
         </View>
       </BottomSheetModule>
 
@@ -747,6 +764,55 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY,
     marginTop: 14,
     textAlign: 'center',
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dateSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 99,
+  },
+  dateText: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  dateOptions: {
+    gap: 8,
+    paddingBottom: 20,
+  },
+  dateOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+  },
+  dateOptionSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+  dateOptionText: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  dateOptionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '800',
   },
 });
 

@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {AlertTriangle, ArrowLeft, Check, Info, Search, ShoppingBag, ShoppingCart, Tags} from 'lucide-react-native';
+import {AlertTriangle, ArrowLeft, Calendar, Check, Info, Search, ShoppingBag, ShoppingCart, Tags} from 'lucide-react-native';
 import {
   ActivityIndicator,
   Button,
@@ -44,20 +44,32 @@ import {
   serializePurchaseBatches,
 } from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
-import {IconBubble, gradientStyle, type} from '../components/KoboUI';
+import {
+  HeroCard,
+  IconBubble,
+  gradientStyle,
+  type,
+} from '../components/KoboUI';
 import {BottomSheetModule} from '../components/BottomSheetModule';
 import {globalEvents, EVENT_CLOSE_ALL_MODALS} from '../utils/events';
 
-const getTodayRange = () => {
+const getDateRanges = () => {
   const now = new Date();
-  const startOfToday = formatISO(
-    new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0),
-  );
-  const endOfToday = formatISO(
-    new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
-  );
+  
+  const startOfToday = formatISO(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
+  const endOfToday = formatISO(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999));
+  
+  const startOfYesterday = formatISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0));
+  const endOfYesterday = formatISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999));
+  
+  const startOfMonth = formatISO(new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0));
+  const endOfMonth = formatISO(new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999));
 
-  return {startOfToday, endOfToday};
+  return {
+    today: { start: startOfToday, end: endOfToday },
+    yesterday: { start: startOfYesterday, end: endOfYesterday },
+    month: { start: startOfMonth, end: endOfMonth },
+  };
 };
 
 const initialBalance = {
@@ -122,13 +134,16 @@ function SalesScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [dateRange, setDateRange] = useState('today'); // 'today' | 'yesterday' | 'month'
+  const [dateModuleOpen, setDateModuleOpen] = useState(false);
 
   const loadSalesData = useCallback(async () => {
     setIsLoading(true);
     try {
       await resetBalanceIfNewDay();
       const db = await getDBConnection();
-      const {startOfToday, endOfToday} = getTodayRange();
+      const ranges = getDateRanges();
+      const current = ranges[dateRange];
 
       const [productsResult, serviceTypesResult, salesResult, servicesResult] =
         await Promise.all([
@@ -148,7 +163,7 @@ function SalesScreen() {
            LEFT JOIN products ON products.id = sales.product_id
            WHERE sales.date BETWEEN ? AND ?
            ORDER BY sales.date DESC;`,
-            [startOfToday, endOfToday],
+            [current.start, current.end],
           ),
           db.executeSql(
             `SELECT id,
@@ -161,7 +176,7 @@ function SalesScreen() {
            FROM services
            WHERE date BETWEEN ? AND ?
            ORDER BY date DESC;`,
-            [startOfToday, endOfToday],
+            [current.start, current.end],
           ),
         ]);
 
@@ -188,7 +203,7 @@ function SalesScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [dateRange]);
 
   useFocusEffect(
     useCallback(() => {
@@ -197,6 +212,7 @@ function SalesScreen() {
       const closeAllListener = () => {
         setSaleModalVisible(false);
         setServiceModalVisible(false);
+        setDateModuleOpen(false);
         setMessage('');
       };
 
@@ -206,6 +222,7 @@ function SalesScreen() {
         globalEvents.off(EVENT_CLOSE_ALL_MODALS, closeAllListener);
         setSaleModalVisible(false);
         setServiceModalVisible(false);
+        setDateModuleOpen(false);
         setMessage('');
       };
     }, [loadSalesData]),
@@ -592,9 +609,49 @@ function SalesScreen() {
           </Text>
         </View>
 
-        <Card mode="contained" style={styles.balanceCard}>
-          <Card.Content>
-            <Text style={styles.cardTitle}>Today's Balance</Text>
+        <HeroCard style={{ marginBottom: 20 }}>
+          <View style={styles.heroTop}>
+            <Text style={styles.heroEyebrow}>
+              {balanceView === 'sales' ? "Sales Total" : balanceView === 'services' ? "Services Total" : "Combined Balance"}
+            </Text>
+            <TouchableOpacity 
+              activeOpacity={0.7}
+              onPress={() => setDateModuleOpen(true)}
+              style={styles.dateSelector}>
+              <Calendar color={COLORS.primaryForeground} size={16} />
+              <Text style={styles.dateText}>
+                {dateRange === 'today' ? 'Today' : dateRange === 'yesterday' ? 'Yesterday' : 'This Month'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.heroAmount, type.number]}>
+            {formatCurrency(
+              balanceView === 'sales' 
+                ? (balance.sales_cash + balance.sales_bank)
+                : balanceView === 'services'
+                ? (balance.services_cash + balance.services_bank)
+                : (balance.sales_cash + balance.sales_bank + balance.services_cash + balance.services_bank)
+            )}
+          </Text>
+
+          <View style={styles.heroStats}>
+             <View style={styles.heroStat}>
+                <Text style={styles.heroStatLabel}>Cash</Text>
+                <Text style={[styles.heroStatValue, type.number]}>
+                  {formatCurrency(balanceView === 'services' ? balance.services_cash : balanceView === 'sales' ? balance.sales_cash : (balance.sales_cash + balance.services_cash))}
+                </Text>
+             </View>
+             <View style={styles.heroStat}>
+                <Text style={styles.heroStatLabel}>Bank</Text>
+                <Text style={[styles.heroStatValue, type.number]}>
+                  {formatCurrency(balanceView === 'services' ? balance.services_bank : balanceView === 'sales' ? balance.sales_bank : (balance.sales_bank + balance.services_bank))}
+                </Text>
+             </View>
+          </View>
+        </HeroCard>
+
+        <Card mode="contained" style={styles.segmentedCard}>
+          <Card.Content style={{ paddingVertical: 12 }}>
             <SegmentedButtons
               value={balanceView}
               onValueChange={setBalanceView}
@@ -605,16 +662,6 @@ function SalesScreen() {
               ]}
               style={styles.segmented}
             />
-            <View style={styles.balanceGrid}>
-              {balanceRows.map(item => (
-                <View key={item.label} style={styles.balanceTile}>
-                  <Text style={styles.balanceLabel}>{item.label}</Text>
-                  <Text style={styles.balanceValue}>
-                    {formatCurrency(item.value)}
-                  </Text>
-                </View>
-              ))}
-            </View>
           </Card.Content>
         </Card>
 
@@ -973,6 +1020,39 @@ function SalesScreen() {
         </View>
       </BottomSheetModule>
       
+      <BottomSheetModule
+        isOpen={dateModuleOpen}
+        onClose={() => setDateModuleOpen(false)}
+        title="Select Range">
+        <View style={styles.dateOptions}>
+          {[
+            { label: 'Today', value: 'today' },
+            { label: 'Yesterday', value: 'yesterday' },
+            { label: 'This Month', value: 'month' },
+          ].map(opt => (
+            <TouchableOpacity
+              key={opt.value}
+              activeOpacity={0.7}
+              onPress={() => {
+                setDateRange(opt.value);
+                setDateModuleOpen(false);
+              }}
+              style={[
+                styles.dateOption,
+                dateRange === opt.value && styles.dateOptionSelected
+              ]}>
+              <Text style={[
+                styles.dateOptionText,
+                dateRange === opt.value && styles.dateOptionTextSelected
+              ]}>
+                {opt.label}
+              </Text>
+              {dateRange === opt.value && <Check color={COLORS.primary} size={20} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </BottomSheetModule>
+
       <LuminousStatus
         visible={Boolean(message)}
         message={message}
@@ -1388,6 +1468,98 @@ const styles = StyleSheet.create({
     gap: 10,
     justifyContent: 'flex-end',
     marginTop: 18,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dateSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 99,
+  },
+  dateText: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  dateOptions: {
+    gap: 8,
+    paddingBottom: 20,
+  },
+  dateOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+  },
+  dateOptionSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+  dateOptionText: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  dateOptionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '800',
+  },
+  segmentedCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    marginBottom: 16,
+  },
+  heroEyebrow: {
+    color: COLORS.primaryForeground,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  heroAmount: {
+    color: COLORS.primaryForeground,
+    fontSize: 38,
+    fontWeight: '800',
+    marginTop: 12,
+  },
+  heroStats: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  heroStat: {
+    flex: 1,
+  },
+  heroStatLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontFamily: FONT_FAMILY,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  heroStatValue: {
+    color: COLORS.primaryForeground,
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 2,
   },
 });
 
