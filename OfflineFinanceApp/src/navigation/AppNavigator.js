@@ -35,6 +35,7 @@ import {STORAGE_KEYS} from '../utils/constants';
 import {loginSuccess} from '../store/slices/authSlice';
 import {COLORS, FONT_FAMILY, glowShadow, softShadow} from '../theme/theme';
 import {gradientStyle} from '../components/KoboUI';
+import {globalEvents, EVENT_CLOSE_ALL_MODALS} from '../utils/events';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -150,7 +151,7 @@ const stackScreenOptions = {
 
 function KoboTabBar({state, descriptors, navigation}) {
   return (
-    <View pointerEvents="box-none" style={styles.tabBarWrap}>
+    <View style={styles.tabBarWrap}>
       <View style={styles.tabBar}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
@@ -159,6 +160,9 @@ function KoboTabBar({state, descriptors, navigation}) {
           const Icon = getTabIcon(route.name);
 
           const onPress = () => {
+            // Immediately broadcast close event to all listeners (screens)
+            globalEvents.emit(EVENT_CLOSE_ALL_MODALS);
+
             const event = navigation.emit({
               type: 'tabPress',
               target: route.key,
@@ -292,8 +296,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderTopColor: COLORS.line,
     borderTopWidth: 1,
-    elevation: 20,
+    elevation: 25,
+    zIndex: 999,
     width: '100%',
+    position: 'relative',
   },
   tabBar: {
     alignItems: 'center',

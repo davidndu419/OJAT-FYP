@@ -1,15 +1,12 @@
 import React, {useCallback, useMemo, useState} from 'react';
-import {StyleSheet, TextInput, TouchableOpacity, View, FlatList} from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetScrollView,
-  BottomSheetTextInput,
-} from '@gorhom/bottom-sheet';
+import {StyleSheet, TextInput, TouchableOpacity, View} from 'react-native';
 import {Text, Divider} from 'react-native-paper';
 import {X, Package, ShoppingBag, TrendingUp, ChevronLeft, ChevronRight, Edit3, Plus, Minus, Calendar} from 'lucide-react-native';
 import {COLORS, FONT_FAMILY, cardShadow, gradientStyle} from '../theme/theme';
 import {KoboButton, IconBubble, type} from './KoboUI';
 import {formatCurrency} from '../utils/helpers';
+import {BottomSheetModule} from './BottomSheetModule';
+import {BottomSheetTextInput} from '@gorhom/bottom-sheet';
 
 export const ProductDetailSheet = ({sheetRef, product, transactions = [], onRestock, onEdit}) => {
   const [mode, setMode] = useState('view'); // 'view' | 'restock' | 'edit'
@@ -21,21 +18,6 @@ export const ProductDetailSheet = ({sheetRef, product, transactions = [], onRest
 
   // Edit form state
   const [editForm, setEditForm] = useState(product || {});
-
-  // Dynamic sizing logic: use content height instead of fixed snap points
-  // enableDynamicSizing={true} handles this in the main BottomSheet component
-
-  const renderBackdrop = useCallback(
-    props => (
-      <BottomSheetBackdrop
-        {...props}
-        disappearsAt={-1}
-        appearsAt={0.5}
-        opacity={0.4}
-      />
-    ),
-    [],
-  );
 
   const handleClose = () => {
     setMode('view');
@@ -339,22 +321,17 @@ export const ProductDetailSheet = ({sheetRef, product, transactions = [], onRest
     </View>
   );
 
+  const isOpen = !!product; // Assume open if product is set
+
   return (
-    <BottomSheet
-      ref={sheetRef}
-      index={-1}
-      enableDynamicSizing={true}
-      enablePanDownToClose={true}
-      backdropComponent={renderBackdrop}
-      keyboardBehavior="fillParent"
-      backgroundStyle={{backgroundColor: COLORS.surface}}
-      handleIndicatorStyle={styles.indicator}>
-      <BottomSheetView style={styles.content}>
-        {mode === 'view' && renderViewMode()}
-        {mode === 'restock' && renderRestockMode()}
-        {mode === 'edit' && renderEditMode()}
-      </BottomSheetView>
-    </BottomSheet>
+    <BottomSheetModule
+      isOpen={isOpen}
+      onClose={handleClose}
+      useScrollView={true}>
+      {mode === 'view' && renderViewMode()}
+      {mode === 'restock' && renderRestockMode()}
+      {mode === 'edit' && renderEditMode()}
+    </BottomSheetModule>
   );
 };
 

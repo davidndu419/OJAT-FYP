@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {ChevronDown, ChevronLeft, ChevronRight, Save, Wallet} from 'lucide-react-native';
-import {Menu, Snackbar, Text} from 'react-native-paper';
+import {Menu, Text} from 'react-native-paper';
 import {format, formatISO, isValid, parseISO} from 'date-fns';
 import {getDBConnection} from '../database/db';
 import {
@@ -23,6 +23,7 @@ import {
 import {syncInBackground} from '../services/syncService';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
 import {HeroCard, IconBubble, KoboButton, ScreenHeader, SurfaceCard, type} from '../components/KoboUI';
+import {LuminousStatus} from '../components/LuminousStatus';
 
 const EXPENSE_CATEGORIES = [
   'Rent',
@@ -174,14 +175,15 @@ function ExpenseScreen() {
       );
 
       await db.executeSql(
-        `INSERT INTO expenses (id, category, description, amount, date, synced)
-         VALUES (?, ?, ?, ?, ?, ?);`,
+        `INSERT INTO expenses (id, category, description, amount, date, updated_at, synced)
+         VALUES (?, ?, ?, ?, ?, ?, ?);`,
         [
           generateId(),
           category,
           description.trim(),
           Number(amount),
           dateValue || getCurrentTimestamp(),
+          getCurrentTimestamp(),
           0,
         ],
       );
@@ -215,7 +217,7 @@ function ExpenseScreen() {
         <Text style={[styles.expenseAmount, type.number]}>
           -{formatCurrency(item.amount)}
         </Text>
-        <Text style={styles.expenseDate}>{format(parseISO(item.date), 'MMM d')}</Text>
+        <Text style={styles.expenseDate}>{format(parseISO(item.date), 'MMM d, h:mm a')}</Text>
       </View>
     </View>
   );
@@ -353,12 +355,12 @@ function ExpenseScreen() {
         {isLoading ? <Text style={styles.loadingText}>Refreshing local expenses...</Text> : null}
       </ScrollView>
 
-      <Snackbar
+      <LuminousStatus
         visible={Boolean(message)}
+        message={message}
         onDismiss={() => setMessage('')}
-        duration={1800}>
-        {message}
-      </Snackbar>
+        type="success"
+      />
     </KeyboardAvoidingView>
   );
 }

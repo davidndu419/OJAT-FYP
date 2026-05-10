@@ -1,10 +1,11 @@
 import React, {useMemo, useState} from 'react';
-import {StyleSheet, TouchableOpacity, View, FlatList, TextInput, ScrollView} from 'react-native';
-import {Text, Divider, Modal} from 'react-native-paper';
+import {StyleSheet, TouchableOpacity, View, TextInput, ScrollView} from 'react-native';
+import {Text} from 'react-native-paper';
 import {X, Search, ChevronLeft, Plus, Minus, AlertCircle, CreditCard, Banknote} from 'lucide-react-native';
 import {COLORS, FONT_FAMILY, cardShadow} from '../theme/theme';
 import {KoboButton, type} from './KoboUI';
 import {formatCurrency} from '../utils/helpers';
+import {BottomSheetModule} from './BottomSheetModule';
 
 export const ConfigureSaleSheet = ({visible, onDismiss, products = [], onConfirm}) => {
   const [step, setStep] = useState(1);
@@ -66,12 +67,7 @@ export const ConfigureSaleSheet = ({visible, onDismiss, products = [], onConfirm
 
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
-      <View style={styles.sheetHeader}>
-        <Text style={styles.sheetTitle}>Record Sale</Text>
-        <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-          <X color={COLORS.muted} size={20} />
-        </TouchableOpacity>
-      </View>
+      <View style={styles.searchContainer}>
 
       <View style={styles.searchContainer}>
         <Search size={18} color={COLORS.muted} style={styles.searchIcon} />
@@ -121,13 +117,11 @@ export const ConfigureSaleSheet = ({visible, onDismiss, products = [], onConfirm
 
   const renderStep2 = () => (
     <View style={styles.stepContainer}>
-      <View style={styles.sheetHeader}>
+    <View style={styles.stepContainer}>
+      <View style={styles.stepSubHeader}>
         <TouchableOpacity onPress={() => setStep(1)} style={styles.backBtn}>
-          <ChevronLeft color={COLORS.text} size={24} />
-        </TouchableOpacity>
-        <Text style={styles.sheetTitleSmall}>Configure Sale</Text>
-        <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-          <X color={COLORS.muted} size={20} />
+          <ChevronLeft color={COLORS.text} size={22} />
+          <Text style={styles.backText}>Back to products</Text>
         </TouchableOpacity>
       </View>
 
@@ -219,14 +213,12 @@ export const ConfigureSaleSheet = ({visible, onDismiss, products = [], onConfirm
   );
 
   return (
-    <Modal
-      visible={visible}
-      onDismiss={handleClose}
-      contentContainerStyle={styles.sheetCard}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {step === 1 ? renderStep1() : renderStep2()}
-      </ScrollView>
-    </Modal>
+    <BottomSheetModule
+      isOpen={visible}
+      onClose={handleClose}
+      title={step === 1 ? "Record Sale" : "Configure Sale"}>
+      {step === 1 ? renderStep1() : renderStep2()}
+    </BottomSheetModule>
   );
 };
 

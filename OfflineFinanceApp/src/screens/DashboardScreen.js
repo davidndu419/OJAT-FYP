@@ -25,6 +25,9 @@ import {
   gradientStyle,
   type,
 } from '../components/KoboUI';
+import {BottomSheetModule} from '../components/BottomSheetModule';
+import {LuminousStatus} from '../components/LuminousStatus';
+import {globalEvents, EVENT_CLOSE_ALL_MODALS} from '../utils/events';
 
 const getDateRange = () => {
   const now = new Date();
@@ -207,6 +210,19 @@ function DashboardScreen({navigation}) {
   useFocusEffect(
     useCallback(() => {
       loadDashboardData();
+
+      const closeAllListener = () => {
+        setBusinessModuleOpen(false);
+        setMessage('');
+      };
+
+      globalEvents.on(EVENT_CLOSE_ALL_MODALS, closeAllListener);
+
+      return () => {
+        globalEvents.off(EVENT_CLOSE_ALL_MODALS, closeAllListener);
+        setBusinessModuleOpen(false);
+        setMessage('');
+      };
     }, [loadDashboardData]),
   );
 
@@ -372,64 +388,53 @@ function DashboardScreen({navigation}) {
         ) : null}
       </ScrollView>
 
-      <Portal>
-        <Modal
-          visible={businessModuleOpen}
-          onDismiss={() => setBusinessModuleOpen(false)}
-          contentContainerStyle={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Business Profile</Text>
-            <TouchableOpacity onPress={() => setBusinessModuleOpen(false)}>
-              <Text style={styles.closeText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-          <Divider style={styles.modalDivider} />
-          
-          <View style={styles.formPanel}>
-            <TextInput
-              mode="outlined"
-              label="Business Name"
-              value={businessName}
-              onChangeText={setBusinessName}
-              style={styles.formInput}
-            />
-            <TextInput
-              mode="outlined"
-              label="Business Address"
-              value={businessAddress}
-              onChangeText={setBusinessAddress}
-              multiline
-              numberOfLines={2}
-              style={styles.formInput}
-            />
-            <TextInput
-              mode="outlined"
-              label="Phone Number"
-              value={businessPhone}
-              onChangeText={setBusinessPhone}
-              keyboardType="phone-pad"
-              style={styles.formInput}
-            />
-            {errors.business ? (
-              <Text style={styles.errorText}>{errors.business}</Text>
-            ) : null}
-            <Button
-              mode="contained"
-              onPress={handleSaveBusinessInfo}
-              style={styles.saveButton}>
-              Save Changes
-            </Button>
-          </View>
-        </Modal>
-      </Portal>
+      <BottomSheetModule
+        isOpen={businessModuleOpen}
+        onClose={() => setBusinessModuleOpen(false)}
+        title="Business Profile">
+        <View style={styles.formPanel}>
+          <TextInput
+            mode="outlined"
+            label="Business Name"
+            value={businessName}
+            onChangeText={setBusinessName}
+            style={styles.formInput}
+          />
+          <TextInput
+            mode="outlined"
+            label="Business Address"
+            value={businessAddress}
+            onChangeText={setBusinessAddress}
+            multiline
+            numberOfLines={2}
+            style={styles.formInput}
+          />
+          <TextInput
+            mode="outlined"
+            label="Phone Number"
+            value={businessPhone}
+            onChangeText={setBusinessPhone}
+            keyboardType="phone-pad"
+            style={styles.formInput}
+          />
+          {errors.business ? (
+            <Text style={styles.errorText}>{errors.business}</Text>
+          ) : null}
+          <Button
+            mode="contained"
+            onPress={handleSaveBusinessInfo}
+            style={styles.saveButton}>
+            Save Changes
+          </Button>
+        </View>
+      </BottomSheetModule>
 
-      {message ? (
-        <Portal>
-          <View style={styles.toast}>
-            <Text style={styles.toastText}>{message}</Text>
-          </View>
-        </Portal>
-      ) : null}
+      <LuminousStatus
+        visible={Boolean(message)}
+        message={message}
+        onDismiss={() => setMessage('')}
+        type="success"
+      />
     </View>
   );
 }

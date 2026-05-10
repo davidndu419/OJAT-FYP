@@ -84,6 +84,7 @@ const TABLE_CONFIG = {
       'cogs',
       'date',
       'payment_method',
+      'updated_at',
       'synced',
     ],
     updateColumns: [
@@ -93,6 +94,7 @@ const TABLE_CONFIG = {
       'cogs',
       'date',
       'payment_method',
+      'updated_at',
     ],
   },
   expenses: {
@@ -100,8 +102,8 @@ const TABLE_CONFIG = {
     post: postExpense,
     get: getExpenses,
     responseKeys: ['expenses'],
-    columns: ['id', 'category', 'description', 'amount', 'date', 'synced'],
-    updateColumns: ['category', 'description', 'amount', 'date'],
+    columns: ['id', 'category', 'description', 'amount', 'date', 'updated_at', 'synced'],
+    updateColumns: ['category', 'description', 'amount', 'date', 'updated_at'],
   },
   services: {
     resultKey: 'services',
@@ -115,6 +117,7 @@ const TABLE_CONFIG = {
       'payment_method',
       'date',
       'notes',
+      'updated_at',
       'synced',
     ],
     updateColumns: [
@@ -123,6 +126,7 @@ const TABLE_CONFIG = {
       'payment_method',
       'date',
       'notes',
+      'updated_at',
     ],
   },
   service_types: {

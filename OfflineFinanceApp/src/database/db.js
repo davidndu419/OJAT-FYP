@@ -68,9 +68,12 @@ export const initDatabase = async () => {
       total REAL,
       cogs REAL,
       date TEXT,
+      updated_at TEXT,
       synced INTEGER DEFAULT 0
     );
   `);
+
+  await addColumnIfMissing(db, 'sales', 'updated_at TEXT');
 
   await addColumnIfMissing(
     db,
@@ -86,9 +89,12 @@ export const initDatabase = async () => {
       description TEXT,
       amount REAL,
       date TEXT,
+      updated_at TEXT,
       synced INTEGER DEFAULT 0
     );
   `);
+
+  await addColumnIfMissing(db, 'expenses', 'updated_at TEXT');
 
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS services (
@@ -98,9 +104,19 @@ export const initDatabase = async () => {
       payment_method TEXT NOT NULL,
       date TEXT NOT NULL,
       notes TEXT,
+      updated_at TEXT,
       synced INTEGER DEFAULT 0
     );
   `);
+
+  await addColumnIfMissing(db, 'services', 'updated_at TEXT');
+
+  // Backfill NULL updated_at values for existing records
+  await db.executeSql('UPDATE products SET updated_at = ? WHERE updated_at IS NULL;', [getCurrentTimestamp()]);
+  await db.executeSql('UPDATE sales SET updated_at = date WHERE updated_at IS NULL;');
+  await db.executeSql('UPDATE expenses SET updated_at = date WHERE updated_at IS NULL;');
+  await db.executeSql('UPDATE services SET updated_at = date WHERE updated_at IS NULL;');
+  await db.executeSql('UPDATE service_types SET updated_at = created_at WHERE updated_at IS NULL;');
 
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS service_types (

@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {ArrowLeft, Check, Search, ShoppingBag, ShoppingCart, Tags} from 'lucide-react-native';
+import {AlertTriangle, ArrowLeft, Check, Info, Search, ShoppingBag, ShoppingCart, Tags} from 'lucide-react-native';
 import {
   ActivityIndicator,
   Button,
@@ -20,10 +20,10 @@ import {
   Modal,
   Portal,
   SegmentedButtons,
-  Snackbar,
   Text,
   TextInput,
 } from 'react-native-paper';
+import {LuminousStatus} from '../components/LuminousStatus';
 import {format, formatISO, parseISO} from 'date-fns';
 import {
   getDBConnection,
@@ -45,6 +45,8 @@ import {
 } from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
 import {IconBubble, gradientStyle, type} from '../components/KoboUI';
+import {BottomSheetModule} from '../components/BottomSheetModule';
+import {globalEvents, EVENT_CLOSE_ALL_MODALS} from '../utils/events';
 
 const getTodayRange = () => {
   const now = new Date();
@@ -109,6 +111,7 @@ function SalesScreen() {
     return () => clearTimeout(timer);
   }, [productSearch]);
   const [quantity, setQuantity] = useState('');
+  const [actualPrice, setActualPrice] = useState('');
   const [salePaymentMethod, setSalePaymentMethod] = useState('cash');
   const [serviceAmount, setServiceAmount] = useState('');
   const [servicePaymentMethod, setServicePaymentMethod] = useState('cash');
@@ -190,6 +193,21 @@ function SalesScreen() {
   useFocusEffect(
     useCallback(() => {
       loadSalesData();
+
+      const closeAllListener = () => {
+        setSaleModalVisible(false);
+        setServiceModalVisible(false);
+        setMessage('');
+      };
+
+      globalEvents.on(EVENT_CLOSE_ALL_MODALS, closeAllListener);
+
+      return () => {
+        globalEvents.off(EVENT_CLOSE_ALL_MODALS, closeAllListener);
+        setSaleModalVisible(false);
+        setServiceModalVisible(false);
+        setMessage('');
+      };
     }, [loadSalesData]),
   );
 
@@ -249,7 +267,7 @@ function SalesScreen() {
 
   const saleTotal =
     selectedProduct && quantity.trim()
-      ? Number(quantity || 0) * Number(selectedProduct.selling_price || 0)
+      ? Number(quantity || 0) * Number(actualPrice || selectedProduct.selling_price || 0)
       : 0;
 
   const closeSaleModal = () => {
@@ -258,6 +276,7 @@ function SalesScreen() {
     setDebouncedSearch('');
     setSelectedProduct(null);
     setQuantity('');
+    setActualPrice('');
     setSalePaymentMethod('cash');
     setSaleStep(1);
     setSelectedCategory('All');
@@ -329,7 +348,7 @@ function SalesScreen() {
       const saleDate = getCurrentTimestamp();
       const remainingQuantity =
         Number(selectedProduct.quantity || 0) - soldQuantity;
-      const total = soldQuantity * Number(selectedProduct.selling_price || 0);
+      const total = soldQuantity * Number(actualPrice || selectedProduct.selling_price || 0);
       const fifoResult = depletePurchaseBatchesFifo(
         selectedProduct,
         soldQuantity,
@@ -350,8 +369,9 @@ function SalesScreen() {
                  cogs,
                  payment_method,
                  date,
+                 updated_at,
                  synced
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
               [
                 generateId(),
                 selectedProduct.id,
@@ -359,6 +379,7 @@ function SalesScreen() {
                 total,
                 fifoResult.cogs,
                 salePaymentMethod,
+                saleDate,
                 saleDate,
                 0,
               ],
@@ -416,8 +437,9 @@ function SalesScreen() {
            payment_method,
            date,
            notes,
+           updated_at,
            synced
-         ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           generateId(),
           selectedServiceType.name,
@@ -425,6 +447,7 @@ function SalesScreen() {
           servicePaymentMethod,
           serviceDate,
           serviceNotes.trim(),
+          serviceDate,
           0,
         ],
       );
@@ -480,6 +503,7 @@ function SalesScreen() {
         activeOpacity={0.84}
         onPress={() => {
           setSelectedProduct(item);
+          setActualPrice(String(item.selling_price || ''));
           setSaleStep(2);
           setErrors(current => ({...current, product: '', form: ''}));
         }}>
@@ -536,7 +560,7 @@ function SalesScreen() {
               </Text>
               <Text style={styles.transactionMeta}>
                 {isSale ? `Qty ${item.quantity}` : 'Service'} |{' '}
-                {format(parseISO(item.date), 'p')}
+                {format(parseISO(item.date), 'MMM d, h:mm a')}
               </Text>
             </View>
             <View style={styles.transactionAmountWrap}>
@@ -653,286 +677,308 @@ function SalesScreen() {
         </Card>
       </ScrollView>
 
-      <Portal>
-        <Modal
-          visible={saleModalVisible}
-          onDismiss={closeSaleModal}
-          contentContainerStyle={styles.bottomSheetModal}
-          onShow={() => {
-            if (saleStep === 1 && searchInputRef.current) {
-               setTimeout(() => searchInputRef.current.focus(), 100);
-            }
-          }}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={styles.sheetHandle} />
-            
-            {saleStep === 1 ? (
-              <View style={styles.stepContainer}>
-                <Text style={styles.modalTitle}>Select Product</Text>
-                {products.length === 0 ? (
-                  <Text style={styles.emptyText}>
-                    Add products in Inventory before recording sales.
-                  </Text>
-                ) : (
-                  <>
-                    <View style={styles.searchWrap}>
-                      <Search
-                        color={COLORS.muted}
-                        size={19}
-                        strokeWidth={2.4}
-                        style={styles.searchIcon}
-                      />
-                      <RNTextInput
-                        ref={searchInputRef}
-                        placeholder="Search product..."
-                        placeholderTextColor={COLORS.muted}
-                        value={productSearch}
-                        onChangeText={value => {
-                          setProductSearch(value);
-                          setErrors(current => ({...current, product: '', form: ''}));
-                        }}
-                        style={styles.searchInput}
-                      />
-                    </View>
-                    
-                    <ScrollView 
-                      horizontal 
-                      showsHorizontalScrollIndicator={false} 
-                      style={styles.chipScroll}
-                      contentContainerStyle={styles.chipScrollContent}>
-                      {categories.map(cat => (
-                        <TouchableOpacity
-                          key={cat}
-                          onPress={() => setSelectedCategory(cat)}
-                          activeOpacity={0.8}
-                          style={[
-                            styles.customCategoryChip,
-                            selectedCategory === cat && styles.customCategoryChipSelected,
-                          ]}>
-                          {selectedCategory === cat && (
-                            <SafeIcon icon={Check} size={14} color={COLORS.primary} style={{marginRight: 4}} />
-                          )}
-                          <Text
-                            style={[
-                              styles.categoryChipText,
-                              selectedCategory === cat && styles.categoryChipTextSelected,
-                            ]}>
-                            {cat}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-
-                    {errors.product ? (
-                      <Text style={styles.errorText}>{errors.product}</Text>
-                    ) : null}
-                    
-                    {!debouncedSearch && selectedCategory === 'All' && filteredProducts.length > 0 && (
-                       <Text style={styles.sectionEyebrow}>FREQUENTLY SOLD</Text>
-                    )}
-                    
-                    <FlatList
-                      data={filteredProducts}
-                      keyExtractor={item => item.id}
-                      renderItem={renderProduct}
-                      scrollEnabled={true}
-                      style={styles.productList}
-                      keyboardShouldPersistTaps="handled"
-                      ListEmptyComponent={
-                        <Text style={styles.emptyText}>
-                          No matching products found.
-                        </Text>
-                      }
+      <BottomSheetModule
+        isOpen={saleModalVisible}
+        onClose={closeSaleModal}
+        title={saleStep === 1 ? 'Select Product' : 'Configure Sale'}
+        scrollable={saleStep === 2}>
+        <View>
+          {saleStep === 1 ? (
+            <View style={styles.stepContainer}>
+              {products.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  Add products in Inventory before recording sales.
+                </Text>
+              ) : (
+                <>
+                  <View style={styles.searchWrap}>
+                    <Search
+                      color={COLORS.muted}
+                      size={19}
+                      strokeWidth={2.4}
+                      style={styles.searchIcon}
                     />
-                  </>
-                )}
-              </View>
-            ) : (
-              <View style={styles.stepContainer}>
-                <View style={styles.stepHeader}>
-                  <TouchableOpacity onPress={() => setSaleStep(1)} style={styles.backButton}>
-                    <ArrowLeft color={COLORS.text} size={24} />
-                  </TouchableOpacity>
-                  <Text style={styles.modalTitle}>Configure Sale</Text>
-                </View>
-                
-                <Card mode="outlined" style={styles.selectedProductCard}>
-                   <Card.Content style={styles.compactOptionContent}>
-                     <View style={styles.optionText}>
-                       <Text style={styles.optionTitle}>{selectedProduct?.name}</Text>
-                       <Text style={styles.optionSubtitle}>
-                         Available: {selectedProduct?.quantity || 0} | {formatCurrency(selectedProduct?.selling_price)}
-                       </Text>
-                     </View>
-                   </Card.Content>
-                </Card>
+                    <RNTextInput
+                      ref={searchInputRef}
+                      placeholder="Search product..."
+                      placeholderTextColor={COLORS.muted}
+                      value={productSearch}
+                      onChangeText={value => {
+                        setProductSearch(value);
+                        setErrors(current => ({...current, product: '', form: ''}));
+                      }}
+                      style={styles.searchInput}
+                    />
+                  </View>
+                  
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    style={styles.chipScroll}
+                    contentContainerStyle={styles.chipScrollContent}>
+                    {categories.map(cat => (
+                      <TouchableOpacity
+                        key={cat}
+                        onPress={() => setSelectedCategory(cat)}
+                        activeOpacity={0.8}
+                        style={[
+                          styles.customCategoryChip,
+                          selectedCategory === cat && styles.customCategoryChipSelected,
+                        ]}>
+                        {selectedCategory === cat && (
+                          <SafeIcon icon={Check} size={14} color={COLORS.primary} style={{marginRight: 4}} />
+                        )}
+                        <Text
+                          style={[
+                            styles.categoryChipText,
+                            selectedCategory === cat && styles.categoryChipTextSelected,
+                          ]}>
+                          {cat}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
 
-                <TextInput
+                  {errors.product ? (
+                    <Text style={styles.errorText}>{errors.product}</Text>
+                  ) : null}
+                  
+                  {!debouncedSearch && selectedCategory === 'All' && filteredProducts.length > 0 && (
+                     <Text style={styles.sectionEyebrow}>FREQUENTLY SOLD</Text>
+                  )}
+                  
+                  <FlatList
+                    data={filteredProducts}
+                    keyExtractor={item => item.id}
+                    renderItem={renderProduct}
+                    scrollEnabled={true}
+                    style={styles.productList}
+                    keyboardShouldPersistTaps="handled"
+                    ListEmptyComponent={
+                      <Text style={styles.emptyText}>
+                        No matching products found.
+                      </Text>
+                    }
+                  />
+                </>
+              )}
+            </View>
+          ) : (
+            <View style={styles.stepContainer}>
+              <View style={styles.stepHeader}>
+                <TouchableOpacity onPress={() => setSaleStep(1)} style={styles.backButton}>
+                  <ArrowLeft color={COLORS.text} size={24} />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>Configure Sale</Text>
+              </View>
+              
+              <Card mode="outlined" style={styles.selectedProductCard}>
+                 <Card.Content style={styles.compactOptionContent}>
+                   <View style={styles.optionText}>
+                     <Text style={styles.optionTitle}>{selectedProduct?.name}</Text>
+                     <Text style={styles.optionSubtitle}>
+                       Available: {selectedProduct?.quantity || 0} | {formatCurrency(selectedProduct?.selling_price)}
+                     </Text>
+                   </View>
+                 </Card.Content>
+              </Card>
+
+              <TextInput
+                mode="outlined"
+                label="Quantity"
+                value={quantity}
+                onChangeText={value => {
+                  setQuantity(value);
+                  setErrors(current => ({
+                    ...current,
+                    quantity: '',
+                    form: '',
+                  }));
+                }}
+                keyboardType="number-pad"
+                style={styles.input}
+              />
+              {errors.quantity ? (
+                <Text style={styles.errorText}>{errors.quantity}</Text>
+              ) : null}
+              <SegmentedButtons
+                value={salePaymentMethod}
+                onValueChange={setSalePaymentMethod}
+                buttons={[
+                  {value: 'cash', label: 'Cash'},
+                  {value: 'bank', label: 'Bank Transfer'},
+                ]}
+                style={styles.segmented}
+              />
+
+              <Text style={styles.fieldLabel}>Desired Amount</Text>
+              <TextInput
+                mode="outlined"
+                label="Selling Price"
+                value={actualPrice}
+                onChangeText={value => {
+                  setActualPrice(value);
+                  setErrors(current => ({
+                    ...current,
+                    actualPrice: '',
+                    form: '',
+                  }));
+                }}
+                keyboardType="decimal-pad"
+                style={styles.input}
+                placeholder={String(selectedProduct?.selling_price || '')}
+              />
+              
+              {selectedProduct && actualPrice && Number(actualPrice) < Number(selectedProduct.selling_price) ? (
+                <View style={styles.warningBox}>
+                  <AlertTriangle color={COLORS.warning} size={16} style={{marginRight: 8}} />
+                  <Text style={styles.warningText}>
+                    Price is lower than default ({formatCurrency(selectedProduct.selling_price)})
+                  </Text>
+                </View>
+              ) : null}
+
+              {selectedProduct && actualPrice && Number(actualPrice) > Number(selectedProduct.selling_price) ? (
+                <View style={styles.infoBox}>
+                  <Info color={COLORS.primary} size={16} style={{marginRight: 8}} />
+                  <Text style={styles.infoText}>
+                    Price is higher than default ({formatCurrency(selectedProduct.selling_price)})
+                  </Text>
+                </View>
+              ) : null}
+              <Card mode="contained" style={styles.totalCard}>
+                <Card.Content>
+                  <Text style={styles.balanceLabel}>Calculated Total</Text>
+                  <Text style={styles.totalValue}>
+                    {formatCurrency(saleTotal)}
+                  </Text>
+                </Card.Content>
+              </Card>
+              {errors.form ? (
+                <Text style={styles.errorText}>{errors.form}</Text>
+              ) : null}
+              <View style={styles.modalActionsFull}>
+                <Button
+                  mode="contained"
+                  loading={isSaving}
+                  disabled={isSaving || !quantity.trim() || Number(quantity) <= 0 || Number(quantity) > Number(selectedProduct?.quantity || 0)}
+                  onPress={handleConfirmSale}
+                  style={styles.confirmButton}
+                  contentStyle={styles.confirmButtonContent}
+                >
+                  Confirm Sale
+                </Button>
+              </View>
+            </View>
+          )}
+        </View>
+      </BottomSheetModule>
+
+      <BottomSheetModule
+        isOpen={serviceModalVisible}
+        onClose={closeServiceModal}
+        title="Record Service">
+        <View>
+          <TextInput
+            mode="outlined"
+            label="Amount"
+            value={serviceAmount}
+            onChangeText={value => {
+              setServiceAmount(value);
+              setErrors(current => ({
+                ...current,
+                serviceAmount: '',
+                form: '',
+              }));
+            }}
+            keyboardType="decimal-pad"
+            style={styles.input}
+          />
+          {errors.serviceAmount ? (
+            <Text style={styles.errorText}>{errors.serviceAmount}</Text>
+          ) : null}
+          <Text style={styles.fieldLabel}>Payment Method</Text>
+          <SegmentedButtons
+            value={servicePaymentMethod}
+            onValueChange={setServicePaymentMethod}
+            buttons={[
+              {value: 'cash', label: 'Cash'},
+              {value: 'bank', label: 'Bank Transfer'},
+            ]}
+            style={styles.segmented}
+          />
+          <Text style={styles.fieldLabel}>Service Type</Text>
+          {serviceTypes.length === 0 ? (
+            <Text style={styles.emptyText}>
+              No service types yet. Go to Settings to add some.
+            </Text>
+          ) : (
+            <Menu
+              visible={serviceTypeMenuVisible}
+              onDismiss={() => setServiceTypeMenuVisible(false)}
+              anchor={
+                <Button
                   mode="outlined"
-                  label="Quantity"
-                  value={quantity}
-                  onChangeText={value => {
-                    setQuantity(value);
+                  onPress={() => setServiceTypeMenuVisible(true)}
+                  style={styles.menuButton}>
+                  {selectedServiceType?.name || 'Select service type'}
+                </Button>
+              }>
+              {serviceTypes.map(item => (
+                <Menu.Item
+                  key={item.id}
+                  title={item.name}
+                  onPress={() => {
+                    setSelectedServiceType(item);
+                    setServiceTypeMenuVisible(false);
                     setErrors(current => ({
                       ...current,
-                      quantity: '',
+                      serviceType: '',
                       form: '',
                     }));
                   }}
-                  keyboardType="number-pad"
-                  style={styles.input}
                 />
-                {errors.quantity ? (
-                  <Text style={styles.errorText}>{errors.quantity}</Text>
-                ) : null}
-                <Text style={styles.fieldLabel}>Payment Method</Text>
-                <SegmentedButtons
-                  value={salePaymentMethod}
-                  onValueChange={setSalePaymentMethod}
-                  buttons={[
-                    {value: 'cash', label: 'Cash'},
-                    {value: 'bank', label: 'Bank Transfer'},
-                  ]}
-                  style={styles.segmented}
-                />
-                <Card mode="contained" style={styles.totalCard}>
-                  <Card.Content>
-                    <Text style={styles.balanceLabel}>Calculated Total</Text>
-                    <Text style={styles.totalValue}>
-                      {formatCurrency(saleTotal)}
-                    </Text>
-                  </Card.Content>
-                </Card>
-                {errors.form ? (
-                  <Text style={styles.errorText}>{errors.form}</Text>
-                ) : null}
-                <View style={styles.modalActionsFull}>
-                  <Button
-                    mode="contained"
-                    loading={isSaving}
-                    disabled={isSaving || !quantity.trim() || Number(quantity) <= 0 || Number(quantity) > Number(selectedProduct?.quantity || 0)}
-                    onPress={handleConfirmSale}
-                    style={styles.confirmButton}
-                    contentStyle={styles.confirmButtonContent}
-                  >
-                    Confirm Sale
-                  </Button>
-                </View>
-              </View>
-            )}
-          </KeyboardAvoidingView>
-        </Modal>
-
-        <Modal
-          visible={serviceModalVisible}
-          onDismiss={closeServiceModal}
-          contentContainerStyle={styles.bottomSheetModal}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={styles.sheetHandle} />
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>Record Service</Text>
-            <TextInput
-              mode="outlined"
-              label="Amount"
-              value={serviceAmount}
-              onChangeText={value => {
-                setServiceAmount(value);
-                setErrors(current => ({
-                  ...current,
-                  serviceAmount: '',
-                  form: '',
-                }));
-              }}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-            {errors.serviceAmount ? (
-              <Text style={styles.errorText}>{errors.serviceAmount}</Text>
-            ) : null}
-            <Text style={styles.fieldLabel}>Payment Method</Text>
-            <SegmentedButtons
-              value={servicePaymentMethod}
-              onValueChange={setServicePaymentMethod}
-              buttons={[
-                {value: 'cash', label: 'Cash'},
-                {value: 'bank', label: 'Bank Transfer'},
-              ]}
-              style={styles.segmented}
-            />
-            <Text style={styles.fieldLabel}>Service Type</Text>
-            {serviceTypes.length === 0 ? (
-              <Text style={styles.emptyText}>
-                No service types yet. Go to Settings to add some.
-              </Text>
-            ) : (
-              <Menu
-                visible={serviceTypeMenuVisible}
-                onDismiss={() => setServiceTypeMenuVisible(false)}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    onPress={() => setServiceTypeMenuVisible(true)}
-                    style={styles.menuButton}>
-                    {selectedServiceType?.name || 'Select service type'}
-                  </Button>
-                }>
-                {serviceTypes.map(item => (
-                  <Menu.Item
-                    key={item.id}
-                    title={item.name}
-                    onPress={() => {
-                      setSelectedServiceType(item);
-                      setServiceTypeMenuVisible(false);
-                      setErrors(current => ({
-                        ...current,
-                        serviceType: '',
-                        form: '',
-                      }));
-                    }}
-                  />
-                ))}
-              </Menu>
-            )}
-            {errors.serviceType ? (
-              <Text style={styles.errorText}>{errors.serviceType}</Text>
-            ) : null}
-            <TextInput
-              mode="outlined"
-              label="Notes"
-              value={serviceNotes}
-              onChangeText={setServiceNotes}
-              multiline
-              style={styles.input}
-            />
-            <Text style={styles.timestampText}>
-              Date/time will be set to {format(new Date(), 'PP p')}
-            </Text>
-            {errors.form ? (
-              <Text style={styles.errorText}>{errors.form}</Text>
-            ) : null}
-            <View style={styles.modalActions}>
-              <Button mode="outlined" onPress={closeServiceModal}>
-                Cancel
-              </Button>
-              <Button
-                mode="contained"
-                loading={isSaving}
-                disabled={isSaving || serviceTypes.length === 0}
-                onPress={handleSaveService}>
-                Save Service
-              </Button>
-            </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </Modal>
-      </Portal>
-
-      <Snackbar
+              ))}
+            </Menu>
+          )}
+          {errors.serviceType ? (
+            <Text style={styles.errorText}>{errors.serviceType}</Text>
+          ) : null}
+          <TextInput
+            mode="outlined"
+            label="Notes"
+            value={serviceNotes}
+            onChangeText={setServiceNotes}
+            multiline
+            style={styles.input}
+          />
+          <Text style={styles.timestampText}>
+            Date/time will be set to {format(new Date(), 'PP p')}
+          </Text>
+          {errors.form ? (
+            <Text style={styles.errorText}>{errors.form}</Text>
+          ) : null}
+          <View style={styles.modalActions}>
+            <Button mode="outlined" onPress={closeServiceModal}>
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              loading={isSaving}
+              disabled={isSaving || serviceTypes.length === 0}
+              onPress={handleSaveService}>
+              Save Service
+            </Button>
+          </View>
+        </View>
+      </BottomSheetModule>
+      
+      <LuminousStatus
         visible={Boolean(message)}
+        message={message}
         onDismiss={() => setMessage('')}
-        duration={1800}>
-        {message}
-      </Snackbar>
+        type="success"
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -1283,7 +1329,36 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY,
     fontSize: 13,
     fontWeight: '800',
+    marginBottom: 6,
     marginTop: 14,
+  },
+  warningBox: {
+    alignItems: 'center',
+    backgroundColor: COLORS.warningPale || '#fffbeb',
+    borderRadius: 8,
+    flexDirection: 'row',
+    marginTop: 10,
+    padding: 10,
+  },
+  warningText: {
+    color: COLORS.warning,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  infoBox: {
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryPale,
+    borderRadius: 8,
+    flexDirection: 'row',
+    marginTop: 10,
+    padding: 10,
+  },
+  infoText: {
+    color: COLORS.primary,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+    fontWeight: '700',
   },
   totalCard: {
     backgroundColor: COLORS.primaryPale,

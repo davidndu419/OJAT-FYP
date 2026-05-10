@@ -25,7 +25,8 @@ import {
   User,
 } from 'lucide-react-native';
 import Svg, {Path} from 'react-native-svg';
-import {Snackbar, Text} from 'react-native-paper';
+import {Text} from 'react-native-paper';
+import {LuminousStatus} from '../../components/LuminousStatus';
 import {googleAuth, registerUser} from '../../services/apiService';
 import {clearDatabase} from '../../database/db';
 import {loginSuccess} from '../../store/slices/authSlice';
@@ -372,12 +373,12 @@ function RegisterScreen({navigation}) {
         </View>
       </ScrollView>
 
-      <Snackbar
+      <LuminousStatus
         visible={successVisible}
+        message="Registration successful."
         onDismiss={() => setSuccessVisible(false)}
-        duration={700}>
-        Registration successful.
-      </Snackbar>
+        type="success"
+      />
     </KeyboardAvoidingView>
   );
 }

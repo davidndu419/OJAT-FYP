@@ -13,7 +13,6 @@ import {
   Divider,
   Portal,
   RadioButton,
-  Snackbar,
   Text,
   TextInput,
 } from 'react-native-paper';
@@ -36,6 +35,9 @@ import {getDBConnection, getSetting, setSetting, clearDatabase} from '../databas
 import {generateId, getCurrentTimestamp, getRowsArray} from '../utils/helpers';
 import {COLORS, FONT_FAMILY, cardShadow} from '../theme/theme';
 import {IconBubble} from '../components/KoboUI';
+import {BottomSheetModule} from '../components/BottomSheetModule';
+import {globalEvents, EVENT_CLOSE_ALL_MODALS} from '../utils/events';
+import {LuminousStatus} from '../components/LuminousStatus';
 
 /* ─────────── helper maps for real-time sub-labels ─────────── */
 const BALANCE_LABELS = {
@@ -72,47 +74,7 @@ function SettingsRow({icon: Icon, iconTone, title, subtitle, onPress}) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   Bottom-Sheet Module — anchored at bottom-80, vertically locked
-   ═══════════════════════════════════════════════════════════════ */
-function BottomSheetModule({visible, title, onDismiss, children}) {
-  if (!visible) {
-    return null;
-  }
 
-  return (
-    <Portal>
-      {/* backdrop */}
-      <Pressable style={styles.backdrop} onPress={onDismiss} />
-
-      {/* sheet card — fixed at bottom-80 */}
-      <View style={styles.sheetContainer}>
-        <View style={styles.sheetCard}>
-          {/* header */}
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>{title}</Text>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              hitSlop={12}
-              onPress={onDismiss}
-              style={styles.sheetClose}>
-              <X color={COLORS.muted} size={20} />
-            </TouchableOpacity>
-          </View>
-          <Divider style={styles.sheetDivider} />
-          {/* body */}
-          <ScrollView
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={styles.sheetBody}>
-            {children}
-          </ScrollView>
-        </View>
-      </View>
-    </Portal>
-  );
-}
 
 /* ═══════════════════════════════════════════════════════════════
    Radio row helper
@@ -203,6 +165,25 @@ function SettingsScreen({navigation}) {
   useFocusEffect(
     useCallback(() => {
       loadSettings();
+
+      const closeAllListener = () => {
+        setServiceModuleOpen(false);
+        setBalanceModuleOpen(false);
+        setProfitModuleOpen(false);
+        setBusinessModuleOpen(false);
+        setMessage('');
+      };
+
+      globalEvents.on(EVENT_CLOSE_ALL_MODALS, closeAllListener);
+
+      return () => {
+        globalEvents.off(EVENT_CLOSE_ALL_MODALS, closeAllListener);
+        setServiceModuleOpen(false);
+        setBalanceModuleOpen(false);
+        setProfitModuleOpen(false);
+        setBusinessModuleOpen(false);
+        setMessage('');
+      };
     }, [loadSettings]),
   );
 
@@ -234,9 +215,10 @@ function SettingsScreen({navigation}) {
 
     try {
       const db = await getDBConnection();
+      const now = getCurrentTimestamp();
       await db.executeSql(
-        'INSERT INTO service_types (id, name, created_at) VALUES (?, ?, ?);',
-        [generateId(), name, getCurrentTimestamp()],
+        'INSERT INTO service_types (id, name, created_at, updated_at) VALUES (?, ?, ?, ?);',
+        [generateId(), name, now, now],
       );
       setNewServiceType('');
       setErrors(current => ({...current, serviceType: '', form: ''}));
@@ -456,11 +438,10 @@ function SettingsScreen({navigation}) {
         ) : null}
       </ScrollView>
 
-      {/* ═══════════ SERVICE TYPES MODULE ═══════════ */}
       <BottomSheetModule
-        visible={serviceModuleOpen}
-        title="Service Types"
-        onDismiss={() => setServiceModuleOpen(false)}>
+        isOpen={serviceModuleOpen}
+        onClose={() => setServiceModuleOpen(false)}
+        title="Service Types">
         <View style={styles.addRow}>
           <TextInput
             mode="outlined"
@@ -484,23 +465,23 @@ function SettingsScreen({navigation}) {
         ) : null}
         <Divider style={styles.divider} />
         {serviceTypes.length > 0 ? (
-          <FlatList
-            data={serviceTypes}
-            keyExtractor={item => item.id}
-            renderItem={renderServiceType}
-            scrollEnabled={false}
-            ItemSeparatorComponent={ServiceSeparator}
-          />
+          <View>
+            {serviceTypes.map(item => (
+              <View key={item.id}>
+                {renderServiceType({item})}
+                <ServiceSeparator />
+              </View>
+            ))}
+          </View>
         ) : (
           <Text style={styles.emptyText}>No service types added yet.</Text>
         )}
       </BottomSheetModule>
 
-      {/* ═══════════ BALANCE DISPLAY MODULE ═══════════ */}
       <BottomSheetModule
-        visible={balanceModuleOpen}
-        title="Balance Card Display"
-        onDismiss={() => setBalanceModuleOpen(false)}>
+        isOpen={balanceModuleOpen}
+        onClose={() => setBalanceModuleOpen(false)}
+        title="Balance Display">
         <RadioButton.Group
           onValueChange={updateBalanceDisplay}
           value={balanceDisplay}>
@@ -516,11 +497,10 @@ function SettingsScreen({navigation}) {
         </RadioButton.Group>
       </BottomSheetModule>
 
-      {/* ═══════════ PROFIT CALCULATION MODULE ═══════════ */}
       <BottomSheetModule
-        visible={profitModuleOpen}
-        title="Profit Calculation"
-        onDismiss={() => setProfitModuleOpen(false)}>
+        isOpen={profitModuleOpen}
+        onClose={() => setProfitModuleOpen(false)}
+        title="Profit Calculation">
         <RadioButton.Group
           onValueChange={updateExpenseAllocation}
           value={expenseAllocation}>
@@ -558,11 +538,10 @@ function SettingsScreen({navigation}) {
         ) : null}
       </BottomSheetModule>
 
-      {/* ═══════════ BUSINESS INFO MODULE ═══════════ */}
       <BottomSheetModule
-        visible={businessModuleOpen}
-        title="Business Profile"
-        onDismiss={() => setBusinessModuleOpen(false)}>
+        isOpen={businessModuleOpen}
+        onClose={() => setBusinessModuleOpen(false)}
+        title="Business Profile">
         <View style={styles.formPanel}>
           <TextInput
             mode="outlined"
@@ -600,13 +579,13 @@ function SettingsScreen({navigation}) {
         </View>
       </BottomSheetModule>
 
-      {/* ═══════════ SNACKBAR ═══════════ */}
-      <Snackbar
+      {/* ═══════════ STATUS POPUP ═══════════ */}
+      <LuminousStatus
         visible={Boolean(message)}
+        message={message}
         onDismiss={() => setMessage('')}
-        duration={1600}>
-        {message}
-      </Snackbar>
+        type="success"
+      />
     </View>
   );
 }

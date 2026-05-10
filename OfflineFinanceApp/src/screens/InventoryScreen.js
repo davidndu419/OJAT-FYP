@@ -18,7 +18,7 @@ import {
   Search,
   X,
 } from 'lucide-react-native';
-import {Modal, Portal, Snackbar, Text} from 'react-native-paper';
+import {Modal, Portal, Text} from 'react-native-paper';
 import {format, formatISO, isValid, parseISO} from 'date-fns';
 import {getDBConnection} from '../database/db';
 import {syncInBackground} from '../services/syncService';
@@ -42,6 +42,9 @@ import {
   gradientStyle,
   type,
 } from '../components/KoboUI';
+import {LuminousStatus} from '../components/LuminousStatus';
+import {BottomSheetModule} from '../components/BottomSheetModule';
+import {globalEvents, EVENT_CLOSE_ALL_MODALS} from '../utils/events';
 
 const formatDateInput = date => format(date, 'yyyy-MM-dd');
 
@@ -97,6 +100,21 @@ function InventoryScreen({navigation}) {
   useFocusEffect(
     useCallback(() => {
       loadProducts();
+
+      const closeAllListener = () => {
+        setIsActionSheetOpen(false);
+        setIsPurchaseSheetOpen(false);
+        setMessage('');
+      };
+
+      globalEvents.on(EVENT_CLOSE_ALL_MODALS, closeAllListener);
+
+      return () => {
+        globalEvents.off(EVENT_CLOSE_ALL_MODALS, closeAllListener);
+        setIsActionSheetOpen(false);
+        setIsPurchaseSheetOpen(false);
+        setMessage('');
+      };
     }, [loadProducts]),
   );
 
@@ -433,93 +451,60 @@ function InventoryScreen({navigation}) {
         <Text style={styles.addButtonText}>+ Product</Text>
       </TouchableOpacity>
 
-      <Portal>
-        <Modal
-          visible={isActionSheetOpen}
-          onDismiss={closeProductActions}
-          contentContainerStyle={styles.bottomSheet}>
-          {selectedProduct ? (
-            <View>
-              <View style={styles.sheetHandle} />
-              <View style={styles.sheetHeader}>
-                <View style={styles.sheetTitleWrap}>
-                  <Text style={styles.sheetEyebrow}>Product</Text>
-                  <Text style={styles.sheetTitle} numberOfLines={1}>
-                    {selectedProduct.name}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  activeOpacity={0.84}
-                  onPress={closeProductActions}
-                  style={styles.iconButton}>
-                  <X color={COLORS.muted} size={18} />
-                </TouchableOpacity>
+      <BottomSheetModule
+        isOpen={isActionSheetOpen}
+        onClose={closeProductActions}
+        title="Product Details">
+        {selectedProduct ? (
+          <View>
+            <View style={styles.actionStats}>
+              <View style={styles.actionStat}>
+                <Text style={styles.actionStatLabel}>Stock</Text>
+                <Text style={[styles.actionStatValue, type.number]}>
+                  {selectedProduct.quantity || 0}
+                </Text>
               </View>
-
-              <View style={styles.actionStats}>
-                <View style={styles.actionStat}>
-                  <Text style={styles.actionStatLabel}>Stock</Text>
-                  <Text style={[styles.actionStatValue, type.number]}>
-                    {selectedProduct.quantity || 0}
-                  </Text>
-                </View>
-                <View style={styles.actionStat}>
-                  <Text style={styles.actionStatLabel}>WAC</Text>
-                  <Text style={[styles.actionStatValue, type.number]}>
-                    {formatCurrency(
-                      selectedProduct.weighted_average_cost ||
-                        selectedProduct.purchase_price ||
-                        selectedProduct.cost_price ||
-                        0,
-                    )}
-                  </Text>
-                </View>
+              <View style={styles.actionStat}>
+                <Text style={styles.actionStatLabel}>WAC</Text>
+                <Text style={[styles.actionStatValue, type.number]}>
+                  {formatCurrency(
+                    selectedProduct.weighted_average_cost ||
+                      selectedProduct.purchase_price ||
+                      selectedProduct.cost_price ||
+                      0,
+                  )}
+                </Text>
               </View>
-
-              <TouchableOpacity
-                activeOpacity={0.86}
-                onPress={openPurchaseSheet}
-                style={[styles.purchaseButton, gradientStyle('success')]}>
-                <PackagePlus
-                  color={COLORS.primaryForeground}
-                  size={20}
-                  strokeWidth={2.4}
-                />
-                <Text style={styles.purchaseButtonText}>Purchase/Restock</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.84}
-                onPress={() => navigateToProductForm(selectedProduct)}
-                style={styles.editButton}>
-                <Text style={styles.editButtonText}>Edit Product Details</Text>
-              </TouchableOpacity>
             </View>
-          ) : null}
-        </Modal>
 
-        <Modal
-          visible={isPurchaseSheetOpen}
-          onDismiss={closePurchaseSheet}
-          contentContainerStyle={styles.purchaseSheet}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View>
-              <View style={styles.sheetHandle} />
-              <View style={styles.sheetHeader}>
-                <View style={styles.sheetTitleWrap}>
-                  <Text style={styles.sheetEyebrow}>Purchase/Restock</Text>
-                  <Text style={styles.sheetTitle} numberOfLines={1}>
-                    {selectedProduct?.name || 'Product'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  activeOpacity={0.84}
-                  onPress={closePurchaseSheet}
-                  style={styles.iconButton}>
-                  <X color={COLORS.muted} size={18} />
-                </TouchableOpacity>
-              </View>
+            <TouchableOpacity
+              activeOpacity={0.86}
+              onPress={openPurchaseSheet}
+              style={[styles.purchaseButton, gradientStyle('success')]}>
+              <PackagePlus
+                color={COLORS.primaryForeground}
+                size={20}
+                strokeWidth={2.4}
+              />
+              <Text style={styles.purchaseButtonText}>Purchase/Restock</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.84}
+              onPress={() => navigateToProductForm(selectedProduct)}
+              style={styles.editButton}>
+              <Text style={styles.editButtonText}>Edit Product Details</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </BottomSheetModule>
+
+      <BottomSheetModule
+        isOpen={isPurchaseSheetOpen}
+        onClose={closePurchaseSheet}
+        title="Purchase / Restock">
+        <View>
+
 
               <View style={styles.formGrid}>
                 <View style={styles.formField}>
@@ -611,17 +596,16 @@ function InventoryScreen({navigation}) {
                 style={styles.savePurchaseButton}>
                 Save Restock
               </KoboButton>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
-      </Portal>
+        </View>
+      </BottomSheetModule>
 
-      <Snackbar
+      {/* ═══════════ STATUS POPUP ═══════════ */}
+      <LuminousStatus
         visible={Boolean(message)}
+        message={message}
         onDismiss={() => setMessage('')}
-        duration={1800}>
-        {message}
-      </Snackbar>
+        type="success"
+      />
     </View>
   );
 }

@@ -10,7 +10,7 @@ import {
   Wifi,
   Wrench,
 } from 'lucide-react-native';
-import {ActivityIndicator, Snackbar, Text} from 'react-native-paper';
+import {ActivityIndicator, Text} from 'react-native-paper';
 import {
   getCurrentNetworkStatus,
   subscribeToNetworkChanges,
@@ -28,6 +28,7 @@ import {
   SurfaceCard,
   type,
 } from '../components/KoboUI';
+import {LuminousStatus} from '../components/LuminousStatus';
 
 const emptyCounts = {
   products: 0,
@@ -268,12 +269,13 @@ function SyncScreen() {
         </KoboButton>
       </SurfaceCard>
 
-      <Snackbar
+      {/* ═══════════ STATUS POPUP ═══════════ */}
+      <LuminousStatus
         visible={Boolean(message)}
+        message={message}
         onDismiss={() => setMessage('')}
-        duration={3200}>
-        {message}
-      </Snackbar>
+        type={message.toLowerCase().includes('failed') || message.toLowerCase().includes('error') ? 'error' : 'success'}
+      />
     </ScrollView>
   );
 }

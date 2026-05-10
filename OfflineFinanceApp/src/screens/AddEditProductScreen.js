@@ -9,7 +9,6 @@ import {
 import {
   Button,
   HelperText,
-  Snackbar,
   Text,
   TextInput,
 } from 'react-native-paper';
@@ -21,6 +20,7 @@ import {
 } from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
 import {syncInBackground} from '../services/syncService';
+import {LuminousStatus} from '../components/LuminousStatus';
 
 const createInitialForm = product => ({
   name: product?.name ? String(product.name) : '',
@@ -347,12 +347,12 @@ function AddEditProductScreen({navigation, route}) {
         ) : null}
       </ScrollView>
 
-      <Snackbar
+      <LuminousStatus
         visible={Boolean(message)}
+        message={message}
         onDismiss={() => setMessage('')}
-        duration={650}>
-        {message}
-      </Snackbar>
+        type="success"
+      />
     </KeyboardAvoidingView>
   );
 }
