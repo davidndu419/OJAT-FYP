@@ -20,6 +20,7 @@ import {
   getCurrentTimestamp,
   getRowsArray,
 } from '../utils/helpers';
+import {syncInBackground} from '../services/syncService';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
 import {HeroCard, IconBubble, KoboButton, ScreenHeader, SurfaceCard, type} from '../components/KoboUI';
 
@@ -191,6 +192,9 @@ function ExpenseScreen() {
       setExpenseDate(formatDateInput(new Date()));
       setMessage('Expense saved successfully.');
       await loadExpenses();
+      
+      // Trigger background sync
+      syncInBackground();
     } catch (error) {
       setErrors({form: 'Unable to save expense. Please try again.'});
     } finally {
@@ -367,7 +371,7 @@ const styles = StyleSheet.create({
   content: {
     alignSelf: 'center',
     maxWidth: 448,
-    paddingBottom: 112,
+    paddingBottom: 100,
     paddingHorizontal: 20,
     width: '100%',
   },

@@ -12,6 +12,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useDispatch, useSelector} from 'react-redux';
 import {
+  ArrowLeft,
   BarChart3,
   LayoutGrid,
   Package,
@@ -64,6 +65,37 @@ function InventoryStack() {
   );
 }
 
+function SettingsStack() {
+  return (
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      <Stack.Screen
+        name="SettingsHome"
+        component={SettingsScreen}
+        options={{title: 'Settings'}}
+      />
+      <Stack.Screen
+        name="Sync"
+        component={SyncScreen}
+        options={({navigation}) => ({
+          headerShown: true,
+          title: 'Cloud Sync',
+          headerStyle: {backgroundColor: COLORS.background},
+          headerShadowVisible: false,
+          headerTintColor: COLORS.primary,
+          headerTitleStyle: styles.headerTitle,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={{marginLeft: -8, marginRight: 10}}>
+              <ArrowLeft color={COLORS.primary} size={24} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+    </Stack.Navigator>
+  );
+}
+
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -71,6 +103,7 @@ function MainTabs() {
       tabBar={renderKoboTabBar}
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
       }}>
       <Tab.Screen
         name="Dashboard"
@@ -89,8 +122,11 @@ function MainTabs() {
         options={{tabBarLabel: 'Spend'}}
       />
       <Tab.Screen name="Reports" component={ReportsScreen} />
-      <Tab.Screen name="Sync" component={SyncScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsStack}
+        options={{tabBarLabel: 'Settings'}}
+      />
     </Tab.Navigator>
   );
 }
@@ -102,7 +138,6 @@ const getTabIcon = routeName => {
     Sales: ShoppingBag,
     Expenses: Wallet,
     Reports: BarChart3,
-    Sync: RefreshCw,
     Settings,
   };
 
@@ -254,24 +289,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tabBarWrap: {
-    alignItems: 'center',
-    bottom: 14,
-    left: 0,
-    paddingHorizontal: 12,
-    position: 'absolute',
-    right: 0,
+    backgroundColor: COLORS.surface,
+    borderTopColor: COLORS.line,
+    borderTopWidth: 1,
+    elevation: 20,
+    width: '100%',
   },
   tabBar: {
-    ...softShadow,
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderColor: COLORS.line,
-    borderRadius: 28,
-    borderWidth: 1,
     flexDirection: 'row',
-    height: 76,
+    height: 72,
     justifyContent: 'space-between',
-    maxWidth: 448,
+    maxWidth: 500,
+    alignSelf: 'center',
     paddingHorizontal: 8,
     width: '100%',
   },

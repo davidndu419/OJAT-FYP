@@ -1,38 +1,26 @@
 import NetInfo from '@react-native-community/netinfo';
-import {syncToServer} from './syncService';
+import {AppState} from 'react-native';
+import {syncInBackground} from './syncService';
 
 let unsubscribeNetworkListener = null;
 let wasOffline = true;
-let isSyncing = false;
 let hasInitialNetworkState = false;
+let appStateSubscription = null;
+let syncInterval = null;
+const HEARTBEAT_SYNC_MS = 600000; // 10 minutes
 
 const isOnline = state =>
   Boolean(state.isConnected) && state.isInternetReachable !== false;
 
-const runAutoSync = async () => {
-  if (isSyncing) {
+export const startNetworkListener = () => {
+  if (unsubscribeNetworkListener) {
     return;
   }
 
-  isSyncing = true;
-  try {
-    const result = await syncToServer();
+  // Initial Sync Check
+  syncInBackground();
 
-    if (!result.success) {
-      console.log('Automatic sync completed with errors:', result.errors);
-    }
-  } catch (error) {
-    console.log('Automatic sync failed:', error);
-  } finally {
-    isSyncing = false;
-  }
-};
-
-export const startNetworkListener = () => {
-  if (unsubscribeNetworkListener) {
-    return unsubscribeNetworkListener;
-  }
-
+  // Network State Listener
   unsubscribeNetworkListener = NetInfo.addEventListener(state => {
     const online = isOnline(state);
 
@@ -43,20 +31,42 @@ export const startNetworkListener = () => {
     }
 
     if (online && wasOffline) {
-      runAutoSync();
+      console.log('[NetworkListener] Online detected, syncing...');
+      syncInBackground();
     }
 
     wasOffline = !online;
   });
 
+  // App State Listener (Sync when returning to app)
+  appStateSubscription = AppState.addEventListener('change', nextAppState => {
+    if (nextAppState === 'active') {
+      console.log('[NetworkListener] App focused, checking sync...');
+      syncInBackground();
+    }
+  });
+
+  // Periodic Heartbeat Sync
+  syncInterval = setInterval(() => {
+    console.log('[NetworkListener] Heartbeat sync triggered');
+    syncInBackground();
+  }, HEARTBEAT_SYNC_MS);
+
   return () => {
     if (unsubscribeNetworkListener) {
       unsubscribeNetworkListener();
       unsubscribeNetworkListener = null;
-      wasOffline = true;
-      isSyncing = false;
-      hasInitialNetworkState = false;
     }
+    if (appStateSubscription) {
+      appStateSubscription.remove();
+      appStateSubscription = null;
+    }
+    if (syncInterval) {
+      clearInterval(syncInterval);
+      syncInterval = null;
+    }
+    wasOffline = true;
+    hasInitialNetworkState = false;
   };
 };
 

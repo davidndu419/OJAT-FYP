@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Platform} from 'react-native';
 import {getDBConnection} from '../database/db';
+import {getCurrentNetworkStatus} from './networkListener';
 import {getRowsArray} from '../utils/helpers';
 import {
   getExpenses,
@@ -24,6 +25,10 @@ const emptySyncedCounts = {
   services: 0,
   serviceTypes: 0,
 };
+
+let lastSyncTime = 0;
+const SYNC_THROTTLE_MS = 30000; // 30 seconds
+let isSyncingInBackground = false;
 
 const SYNC_TABLES = [
   'products',
@@ -391,3 +396,28 @@ export const syncToServer = async () => {
 };
 
 export const syncPendingData = syncToServer;
+
+export const syncInBackground = async (force = false) => {
+  const now = Date.now();
+  
+  if (!force && (isSyncingInBackground || now - lastSyncTime < SYNC_THROTTLE_MS)) {
+    return;
+  }
+
+  isSyncingInBackground = true;
+  try {
+    const network = await getCurrentNetworkStatus();
+    if (!network.isOnline) {
+      console.log('[SyncService] Device is offline, skipping background sync');
+      return;
+    }
+
+    console.log('[SyncService] Starting background sync...');
+    await syncToServer();
+    lastSyncTime = Date.now();
+  } catch (error) {
+    console.error('[SyncService] Background sync failed:', error);
+  } finally {
+    isSyncingInBackground = false;
+  }
+};

@@ -26,6 +26,8 @@ import {
 } from '../../store/slices/authSlice';
 import {GOOGLE_WEB_CLIENT_ID, STORAGE_KEYS} from '../../utils/constants';
 import {googleAuth, loginUser, registerUser} from '../../services/apiService';
+import {syncToServer} from '../../services/syncService';
+import {clearDatabase} from '../../database/db';
 import {COLORS, FONT_FAMILY} from '../../theme/theme';
 import {HeroCard, IconBubble, SurfaceCard, gradientStyle} from '../../components/KoboUI';
 
@@ -80,9 +82,21 @@ function LoginScreen({navigation, route}) {
   };
 
   const saveAuthSession = async (token, user) => {
+    // Clear local data for the previous user before signing in the new one
+    try {
+      await clearDatabase();
+    } catch (dbError) {
+      console.error('[LoginScreen] Failed to clear database:', dbError);
+    }
+
     await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
     await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     dispatch(loginSuccess({user, token}));
+
+    // Trigger an initial sync to pull user's cloud data
+    syncToServer().catch(syncError => {
+      console.error('[LoginScreen] Initial sync failed:', syncError);
+    });
   };
 
   const handleLogin = async () => {

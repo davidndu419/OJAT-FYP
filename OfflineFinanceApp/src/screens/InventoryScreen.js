@@ -21,6 +21,7 @@ import {
 import {Modal, Portal, Snackbar, Text} from 'react-native-paper';
 import {format, formatISO, isValid, parseISO} from 'date-fns';
 import {getDBConnection} from '../database/db';
+import {syncInBackground} from '../services/syncService';
 import {
   formatCurrency,
   generateId,
@@ -312,6 +313,9 @@ function InventoryScreen({navigation}) {
       );
       closePurchaseSheet();
       await loadProducts();
+      
+      // Trigger background sync
+      syncInBackground();
     } catch (error) {
       setErrors({form: 'Unable to save purchase. Please try again.'});
     } finally {
@@ -681,7 +685,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     gap: 12,
-    paddingBottom: 124,
+    paddingBottom: 140,
   },
   emptyListContent: {
     flexGrow: 1,

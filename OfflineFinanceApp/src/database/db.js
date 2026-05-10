@@ -1,6 +1,6 @@
 import SQLite from 'react-native-sqlite-storage';
 import {format} from 'date-fns';
-import {DATABASE_NAME} from '../utils/constants';
+import {DATABASE_NAME, TABLE_NAMES} from '../utils/constants';
 import {generateId, getCurrentTimestamp} from '../utils/helpers';
 
 SQLite.enablePromise(true);
@@ -249,4 +249,20 @@ export const setSetting = async (key, value) => {
   );
 
   return String(value);
+};
+
+export const clearDatabase = async () => {
+  const db = await getDBConnection();
+  const tables = Object.values(TABLE_NAMES);
+
+  for (const table of tables) {
+    try {
+      await db.executeSql(`DROP TABLE IF EXISTS ${table};`);
+    } catch (error) {
+      console.error(`Failed to drop table ${table}:`, error);
+    }
+  }
+
+  // Re-initialize tables
+  return initDatabase();
 };

@@ -27,6 +27,7 @@ import {
 import Svg, {Path} from 'react-native-svg';
 import {Snackbar, Text} from 'react-native-paper';
 import {googleAuth, registerUser} from '../../services/apiService';
+import {clearDatabase} from '../../database/db';
 import {loginSuccess} from '../../store/slices/authSlice';
 import {GOOGLE_WEB_CLIENT_ID, STORAGE_KEYS} from '../../utils/constants';
 import {COLORS, FONT_FAMILY} from '../../theme/theme';
@@ -106,6 +107,13 @@ function RegisterScreen({navigation}) {
   };
 
   const saveAuthSession = async (token, user) => {
+    // Clear any leftover data from previous sessions
+    try {
+      await clearDatabase();
+    } catch (dbError) {
+      console.error('[RegisterScreen] Failed to clear database:', dbError);
+    }
+
     await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
     await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     dispatch(loginSuccess({user, token}));

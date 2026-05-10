@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {ArrowLeft, Search} from 'lucide-react-native';
+import {ArrowLeft, Check, Search, ShoppingBag, ShoppingCart, Tags} from 'lucide-react-native';
 import {
   ActivityIndicator,
   Button,
@@ -38,11 +38,13 @@ import {
   getCurrentTimestamp,
   getRowsArray,
 } from '../utils/helpers';
+import {syncInBackground} from '../services/syncService';
 import {
   depletePurchaseBatchesFifo,
   serializePurchaseBatches,
 } from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
+import {IconBubble, gradientStyle, type} from '../components/KoboUI';
 
 const getTodayRange = () => {
   const now = new Date();
@@ -76,6 +78,13 @@ const preferenceToView = preference => {
 };
 
 const ListGap = () => <View style={styles.listGap} />;
+
+const SafeIcon = ({icon: IconComponent, ...props}) => {
+  if (!IconComponent) {
+    return <View style={{width: props.size || 20, height: props.size || 20}} />;
+  }
+  return <IconComponent {...props} />;
+};
 
 function SalesScreen() {
   const [products, setProducts] = useState([]);
@@ -378,6 +387,9 @@ function SalesScreen() {
       setMessage('Sale recorded successfully.');
       closeSaleModal();
       await loadSalesData();
+      
+      // Trigger background sync
+      syncInBackground();
     } catch (error) {
       setErrors({form: 'Unable to record sale. Please try again.'});
     } finally {
@@ -421,6 +433,9 @@ function SalesScreen() {
       setMessage('Service recorded successfully.');
       closeServiceModal();
       await loadSalesData();
+      
+      // Trigger background sync
+      syncInBackground();
     } catch (error) {
       setErrors({form: 'Unable to save service. Please try again.'});
     } finally {
@@ -481,9 +496,11 @@ function SalesScreen() {
                 {item.category || 'SKU'} · Qty {item.quantity || 0} | {formatCurrency(item.selling_price)}
               </Text>
             </View>
-            <Chip compact selected={isOnlyMatch}>
-              Select
-            </Chip>
+            <View style={[styles.compactChip, isOnlyMatch && styles.compactChipSelected]}>
+              <Text style={[styles.compactChipText, isOnlyMatch && styles.compactChipTextSelected]}>
+                {isOnlyMatch ? 'Selected' : 'Select'}
+              </Text>
+            </View>
           </Card.Content>
         </Card>
       </TouchableOpacity>
@@ -493,6 +510,8 @@ function SalesScreen() {
   const renderTransaction = ({item}) => {
     const isSale = item.kind === 'sale';
     const tag = item.payment_method === 'bank' ? 'Bank' : 'Cash';
+    const Icon = isSale ? ShoppingCart : ShoppingBag;
+    const tone = isSale ? 'accent' : 'success';
 
     return (
       <Card
@@ -501,8 +520,16 @@ function SalesScreen() {
           styles.transactionCard,
           isSale ? styles.saleBorder : styles.serviceBorder,
         ]}>
-        <Card.Content>
+        <Card.Content style={styles.transactionCardContent}>
           <View style={styles.transactionTop}>
+            <IconBubble tone={isSale ? 'primary' : 'success'} size={42}>
+              <SafeIcon
+                icon={isSale ? ShoppingCart : Tags}
+                color={isSale ? COLORS.primary : COLORS.success}
+                size={19}
+                strokeWidth={2.4}
+              />
+            </IconBubble>
             <View style={styles.transactionText}>
               <Text style={styles.transactionTitle}>
                 {item.title || (isSale ? 'Deleted product' : 'Service')}
@@ -513,12 +540,12 @@ function SalesScreen() {
               </Text>
             </View>
             <View style={styles.transactionAmountWrap}>
-              <Text style={styles.transactionAmount}>
+              <Text style={[styles.transactionAmount, type.number]}>
                 {formatCurrency(item.amount)}
               </Text>
-              <Chip compact style={styles.paymentChip}>
-                {tag}
-              </Chip>
+              <View style={styles.paymentBadge}>
+                <Text style={styles.paymentBadgeText}>{tag}</Text>
+              </View>
             </View>
           </View>
         </Card.Content>
@@ -570,6 +597,7 @@ function SalesScreen() {
         <View style={styles.actionRow}>
           <Button
             mode="contained"
+            icon={() => <SafeIcon icon={ShoppingCart} size={20} color="#fff" />}
             buttonColor={COLORS.accent}
             style={styles.actionButton}
             contentStyle={styles.actionButtonContent}
@@ -578,6 +606,7 @@ function SalesScreen() {
           </Button>
           <Button
             mode="contained"
+            icon={() => <SafeIcon icon={Tags} size={20} color="#fff" />}
             buttonColor={COLORS.success}
             style={styles.actionButton}
             contentStyle={styles.actionButtonContent}
@@ -672,15 +701,25 @@ function SalesScreen() {
                       style={styles.chipScroll}
                       contentContainerStyle={styles.chipScrollContent}>
                       {categories.map(cat => (
-                        <Chip
+                        <TouchableOpacity
                           key={cat}
-                          selected={selectedCategory === cat}
                           onPress={() => setSelectedCategory(cat)}
-                          style={styles.categoryChip}
-                          textStyle={selectedCategory === cat ? styles.categoryChipTextSelected : styles.categoryChipText}
-                        >
-                          {cat}
-                        </Chip>
+                          activeOpacity={0.8}
+                          style={[
+                            styles.customCategoryChip,
+                            selectedCategory === cat && styles.customCategoryChipSelected,
+                          ]}>
+                          {selectedCategory === cat && (
+                            <SafeIcon icon={Check} size={14} color={COLORS.primary} style={{marginRight: 4}} />
+                          )}
+                          <Text
+                            style={[
+                              styles.categoryChipText,
+                              selectedCategory === cat && styles.categoryChipTextSelected,
+                            ]}>
+                            {cat}
+                          </Text>
+                        </TouchableOpacity>
                       ))}
                     </ScrollView>
 
@@ -906,7 +945,7 @@ const styles = StyleSheet.create({
   content: {
     alignSelf: 'center',
     maxWidth: 448,
-    paddingBottom: 112,
+    paddingBottom: 140,
     paddingHorizontal: 20,
     width: '100%',
   },
@@ -1031,14 +1070,57 @@ const styles = StyleSheet.create({
   transactionAmountWrap: {
     alignItems: 'flex-end',
   },
+  transactionCardContent: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
   transactionAmount: {
     color: COLORS.text,
+    fontSize: 15,
+  },
+  paymentBadge: {
+    backgroundColor: COLORS.primaryPale,
+    borderRadius: 6,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  paymentBadgeText: {
+    color: COLORS.primary,
     fontFamily: FONT_FAMILY,
-    fontSize: 14,
+    fontSize: 10,
     fontWeight: '800',
   },
-  paymentChip: {
-    marginTop: 6,
+  compactChip: {
+    backgroundColor: COLORS.secondary,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  compactChipSelected: {
+    backgroundColor: COLORS.primary,
+  },
+  compactChipText: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  compactChipTextSelected: {
+    color: COLORS.primaryForeground,
+  },
+  customCategoryChip: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    height: 36,
+    paddingHorizontal: 14,
+  },
+  customCategoryChipSelected: {
+    backgroundColor: COLORS.primaryPale,
+    borderColor: COLORS.primary,
   },
   emptyText: {
     color: COLORS.muted,

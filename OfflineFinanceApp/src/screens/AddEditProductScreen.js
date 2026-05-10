@@ -20,6 +20,7 @@ import {
   serializePurchaseBatches,
 } from '../utils/inventoryAccounting';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
+import {syncInBackground} from '../services/syncService';
 
 const createInitialForm = product => ({
   name: product?.name ? String(product.name) : '',
@@ -188,6 +189,10 @@ function AddEditProductScreen({navigation, route}) {
           ? 'Product updated successfully.'
           : 'Product saved successfully.',
       );
+      
+      // Trigger background sync
+      syncInBackground();
+
       setTimeout(() => {
         navigation.goBack();
       }, 650);
@@ -203,6 +208,10 @@ function AddEditProductScreen({navigation, route}) {
       const db = await getDBConnection();
       await db.executeSql('DELETE FROM products WHERE id = ?;', [product.id]);
       setMessage('Product deleted successfully.');
+      
+      // Trigger background sync
+      syncInBackground();
+
       setTimeout(() => {
         navigation.goBack();
       }, 650);
@@ -355,7 +364,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 36,
+    paddingBottom: 100,
   },
   title: {
     color: COLORS.text,

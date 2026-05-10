@@ -18,14 +18,21 @@ import {
   TextInput,
 } from 'react-native-paper';
 import {
+  Briefcase,
   ChevronRight,
   Layers,
   LayoutGrid,
+  LogOut,
   PieChart,
+  RefreshCw,
   User,
   X,
 } from 'lucide-react-native';
-import {getDBConnection, getSetting, setSetting} from '../database/db';
+import {useDispatch} from 'react-redux';
+import {logout} from '../store/slices/authSlice';
+import {STORAGE_KEYS} from '../utils/constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {getDBConnection, getSetting, setSetting, clearDatabase} from '../database/db';
 import {generateId, getCurrentTimestamp, getRowsArray} from '../utils/helpers';
 import {COLORS, FONT_FAMILY, cardShadow} from '../theme/theme';
 import {IconBubble} from '../components/KoboUI';
@@ -127,7 +134,7 @@ const ServiceSeparator = () => <Divider />;
 /* ═══════════════════════════════════════════════════════════════
    MAIN SETTINGS SCREEN
    ═══════════════════════════════════════════════════════════════ */
-function SettingsScreen() {
+function SettingsScreen({navigation}) {
   /* ── state ─────────────────────────────────────────────── */
   const [serviceTypes, setServiceTypes] = useState([]);
   const [newServiceType, setNewServiceType] = useState('');
@@ -143,6 +150,13 @@ function SettingsScreen() {
   const [serviceModuleOpen, setServiceModuleOpen] = useState(false);
   const [balanceModuleOpen, setBalanceModuleOpen] = useState(false);
   const [profitModuleOpen, setProfitModuleOpen] = useState(false);
+  const [businessModuleOpen, setBusinessModuleOpen] = useState(false);
+ 
+  const [businessName, setBusinessName] = useState('');
+  const [businessAddress, setBusinessAddress] = useState('');
+  const [businessPhone, setBusinessPhone] = useState('');
+ 
+  const dispatch = useDispatch();
 
   /* ── data loading ──────────────────────────────────────── */
   const loadSettings = useCallback(async () => {
@@ -157,11 +171,17 @@ function SettingsScreen() {
         allocationValue,
         salesPercentValue,
         servicesPercentValue,
+        businessNameValue,
+        businessAddressValue,
+        businessPhoneValue,
       ] = await Promise.all([
         getSetting('balance_display'),
         getSetting('expense_allocation'),
         getSetting('sales_expense_percent'),
         getSetting('services_expense_percent'),
+        getSetting('business_name'),
+        getSetting('business_address'),
+        getSetting('business_phone'),
       ]);
 
       setServiceTypes(getRowsArray(serviceTypesResult));
@@ -169,6 +189,9 @@ function SettingsScreen() {
       setExpenseAllocation(allocationValue || 'combined');
       setSalesPercent(salesPercentValue || '60');
       setServicesPercent(servicesPercentValue || '40');
+      setBusinessName(businessNameValue || '');
+      setBusinessAddress(businessAddressValue || '');
+      setBusinessPhone(businessPhoneValue || '');
       setErrors({});
     } catch (error) {
       setErrors({form: 'Unable to load settings from SQLite.'});
@@ -247,6 +270,42 @@ function SettingsScreen() {
     setErrors(current => ({...current, form: ''}));
     await setSetting('balance_display', value);
     setMessage('Balance display preference saved.');
+  };
+ 
+  /* ── handlers: business info ─────────────────────────── */
+  const handleSaveBusinessInfo = async () => {
+    if (!businessName.trim()) {
+      setErrors(current => ({...current, business: 'Business name is required.'}));
+      return;
+    }
+ 
+    try {
+      await Promise.all([
+        setSetting('business_name', businessName.trim()),
+        setSetting('business_address', businessAddress.trim()),
+        setSetting('business_phone', businessPhone.trim()),
+      ]);
+      setErrors(current => ({...current, business: ''}));
+      setMessage('Business information updated.');
+      setBusinessModuleOpen(false);
+    } catch (error) {
+      setErrors(current => ({...current, business: 'Unable to save business info.'}));
+    }
+  };
+ 
+  /* ── handlers: logout ────────────────────────────────── */
+  const handleLogout = async () => {
+    try {
+      await clearDatabase();
+    } catch (dbError) {
+      console.error('[SettingsScreen] Failed to clear database:', dbError);
+    }
+ 
+    await AsyncStorage.multiRemove([
+      STORAGE_KEYS.AUTH_TOKEN,
+      STORAGE_KEYS.USER,
+    ]);
+    dispatch(logout());
   };
 
   /* ── handlers: profit calculation ──────────────────────── */
@@ -358,17 +417,36 @@ function SettingsScreen() {
             subtitle={profitSubLabel}
             onPress={() => setProfitModuleOpen(true)}
           />
+          <Divider style={styles.rowDivider} />
+          <SettingsRow
+            icon={RefreshCw}
+            iconTone="success"
+            title="Cloud Sync"
+            subtitle="Manage data backups and cloud connectivity"
+            onPress={() => navigation.navigate('Sync')}
+          />
         </View>
 
-        {/* ── Account section (preserved) ───────────────── */}
-        <Text style={styles.sectionLabel}>ACCOUNT</Text>
+        {/* ── Business Profile section ───────────────────── */}
+        <Text style={styles.sectionLabel}>BUSINESS PROFILE</Text>
         <View style={styles.listCard}>
           <SettingsRow
-            icon={User}
+            icon={Briefcase}
             iconTone="primary"
-            title="Personal Info"
-            subtitle="Profile, email, and contact details"
-            onPress={() => {}}
+            title="Business Info"
+            subtitle={businessName || 'Configure your business details'}
+            onPress={() => setBusinessModuleOpen(true)}
+          />
+        </View>
+ 
+        <Text style={styles.sectionLabel}>SESSION</Text>
+        <View style={styles.listCard}>
+          <SettingsRow
+            icon={LogOut}
+            iconTone="danger"
+            title="Logout"
+            subtitle="Securely sign out and clear local cache"
+            onPress={handleLogout}
           />
         </View>
 
@@ -480,6 +558,48 @@ function SettingsScreen() {
         ) : null}
       </BottomSheetModule>
 
+      {/* ═══════════ BUSINESS INFO MODULE ═══════════ */}
+      <BottomSheetModule
+        visible={businessModuleOpen}
+        title="Business Profile"
+        onDismiss={() => setBusinessModuleOpen(false)}>
+        <View style={styles.formPanel}>
+          <TextInput
+            mode="outlined"
+            label="Business Name"
+            value={businessName}
+            onChangeText={setBusinessName}
+            style={styles.formInput}
+          />
+          <TextInput
+            mode="outlined"
+            label="Business Address"
+            value={businessAddress}
+            onChangeText={setBusinessAddress}
+            multiline
+            numberOfLines={2}
+            style={styles.formInput}
+          />
+          <TextInput
+            mode="outlined"
+            label="Phone Number"
+            value={businessPhone}
+            onChangeText={setBusinessPhone}
+            keyboardType="phone-pad"
+            style={styles.formInput}
+          />
+          {errors.business ? (
+            <Text style={styles.errorText}>{errors.business}</Text>
+          ) : null}
+          <Button
+            mode="contained"
+            onPress={handleSaveBusinessInfo}
+            style={styles.saveButton}>
+            Save Changes
+          </Button>
+        </View>
+      </BottomSheetModule>
+
       {/* ═══════════ SNACKBAR ═══════════ */}
       <Snackbar
         visible={Boolean(message)}
@@ -506,7 +626,7 @@ const styles = StyleSheet.create({
   content: {
     alignSelf: 'center',
     maxWidth: 448,
-    paddingBottom: 112,
+    paddingBottom: 140,
     paddingHorizontal: 20,
     width: '100%',
   },
@@ -706,6 +826,20 @@ const styles = StyleSheet.create({
   },
   percentInput: {
     backgroundColor: COLORS.surface,
+  },
+
+  /* Form panel (for business info) */
+  formPanel: {
+    gap: 12,
+    paddingVertical: 10,
+  },
+  formInput: {
+    backgroundColor: COLORS.surface,
+  },
+  saveButton: {
+    borderRadius: 8,
+    marginTop: 8,
+    paddingVertical: 4,
   },
 
   /* Misc */

@@ -665,7 +665,7 @@ function TransactionHistoryScreen({navigation}) {
         }
         contentContainerStyle={[
           styles.listContent,
-          {paddingBottom: Math.max(insets.bottom + 24, 36)},
+          {paddingBottom: 100},
         ]}
         showsVerticalScrollIndicator={false}
       />

@@ -6,15 +6,15 @@ import {useDispatch, useSelector} from 'react-redux';
 import {
   Activity,
   ArrowUpRight,
+  Briefcase,
   Package,
   ShoppingBag,
   Sparkles,
   TrendingDown,
   Wallet,
 } from 'lucide-react-native';
-import {Text} from 'react-native-paper';
-import {getDBConnection} from '../database/db';
-import {logout} from '../store/slices/authSlice';
+import {Button, Divider, Modal, Portal, Text, TextInput} from 'react-native-paper';
+import {getDBConnection, getSetting, setSetting} from '../database/db';
 import {STORAGE_KEYS} from '../utils/constants';
 import {formatCurrency, getRowsArray} from '../utils/helpers';
 import {COLORS, FONT_FAMILY} from '../theme/theme';
@@ -109,6 +109,12 @@ function DashboardScreen({navigation}) {
     lowStockCount: 0,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [businessModuleOpen, setBusinessModuleOpen] = useState(false);
+  const [businessName, setBusinessName] = useState('');
+  const [businessAddress, setBusinessAddress] = useState('');
+  const [businessPhone, setBusinessPhone] = useState('');
+  const [errors, setErrors] = useState({});
+  const [message, setMessage] = useState('');
 
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true);
@@ -182,19 +188,17 @@ function DashboardScreen({navigation}) {
         inventoryValue,
         lowStockCount: lowStock.length,
       });
+
+      const [nameVal, addrVal, phoneVal] = await Promise.all([
+        getSetting('business_name'),
+        getSetting('business_address'),
+        getSetting('business_phone'),
+      ]);
+      setBusinessName(nameVal || '');
+      setBusinessAddress(addrVal || '');
+      setBusinessPhone(phoneVal || '');
     } catch (error) {
-      setSummary({
-        todaySales: 0,
-        todayServices: 0,
-        todayExpenses: 0,
-        todayNetProfit: 0,
-        yesterdaySales: 0,
-        yesterdayServices: 0,
-        yesterdayExpenses: 0,
-        yesterdayNetProfit: 0,
-        inventoryValue: 0,
-        lowStockCount: 0,
-      });
+      // ... handled
     } finally {
       setIsLoading(false);
     }
@@ -212,12 +216,24 @@ function DashboardScreen({navigation}) {
     return () => clearInterval(interval);
   }, [loadDashboardData]);
 
-  const handleLogout = async () => {
-    await AsyncStorage.multiRemove([
-      STORAGE_KEYS.AUTH_TOKEN,
-      STORAGE_KEYS.USER,
-    ]);
-    dispatch(logout());
+  const handleSaveBusinessInfo = async () => {
+    if (!businessName.trim()) {
+      setErrors({business: 'Business name is required.'});
+      return;
+    }
+
+    try {
+      await Promise.all([
+        setSetting('business_name', businessName.trim()),
+        setSetting('business_address', businessAddress.trim()),
+        setSetting('business_phone', businessPhone.trim()),
+      ]);
+      setMessage('Business information updated.');
+      setBusinessModuleOpen(false);
+      setErrors({});
+    } catch (error) {
+      setErrors({business: 'Unable to save business info.'});
+    }
   };
 
   const displayName =
@@ -287,9 +303,10 @@ function DashboardScreen({navigation}) {
           </View>
           <TouchableOpacity
             activeOpacity={0.84}
-            onPress={handleLogout}
-            style={styles.bellButton}>
-            <Text style={styles.logoutText}>Logout</Text>
+            onPress={() => setBusinessModuleOpen(true)}
+            style={styles.businessButton}>
+            <Briefcase color={COLORS.primary} size={18} strokeWidth={2.5} />
+            <Text style={styles.businessBtnText}>Business</Text>
           </TouchableOpacity>
         </View>
 
@@ -354,6 +371,65 @@ function DashboardScreen({navigation}) {
           <Text style={styles.loading}>Refreshing local data...</Text>
         ) : null}
       </ScrollView>
+
+      <Portal>
+        <Modal
+          visible={businessModuleOpen}
+          onDismiss={() => setBusinessModuleOpen(false)}
+          contentContainerStyle={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Business Profile</Text>
+            <TouchableOpacity onPress={() => setBusinessModuleOpen(false)}>
+              <Text style={styles.closeText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <Divider style={styles.modalDivider} />
+          
+          <View style={styles.formPanel}>
+            <TextInput
+              mode="outlined"
+              label="Business Name"
+              value={businessName}
+              onChangeText={setBusinessName}
+              style={styles.formInput}
+            />
+            <TextInput
+              mode="outlined"
+              label="Business Address"
+              value={businessAddress}
+              onChangeText={setBusinessAddress}
+              multiline
+              numberOfLines={2}
+              style={styles.formInput}
+            />
+            <TextInput
+              mode="outlined"
+              label="Phone Number"
+              value={businessPhone}
+              onChangeText={setBusinessPhone}
+              keyboardType="phone-pad"
+              style={styles.formInput}
+            />
+            {errors.business ? (
+              <Text style={styles.errorText}>{errors.business}</Text>
+            ) : null}
+            <Button
+              mode="contained"
+              onPress={handleSaveBusinessInfo}
+              style={styles.saveButton}>
+              Save Changes
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
+
+      {message ? (
+        <Portal>
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{message}</Text>
+          </View>
+        </Portal>
+      ) : null}
     </View>
   );
 }
@@ -438,7 +514,7 @@ const styles = StyleSheet.create({
   content: {
     alignSelf: 'center',
     maxWidth: 448,
-    paddingBottom: 112,
+    paddingBottom: 140,
     paddingHorizontal: 20,
     paddingTop: 30,
     width: '100%',
@@ -462,21 +538,79 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     marginTop: 1,
   },
-  bellButton: {
+  businessButton: {
     alignItems: 'center',
-    backgroundColor: COLORS.dangerSoft,
-    borderColor: COLORS.danger,
+    backgroundColor: COLORS.primarySoft,
+    borderColor: COLORS.primary,
     borderRadius: 18,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
     justifyContent: 'center',
     minHeight: 44,
     paddingHorizontal: 14,
   },
-  logoutText: {
-    color: COLORS.danger,
+  businessBtnText: {
+    color: COLORS.primary,
     fontFamily: FONT_FAMILY,
     fontSize: 13,
     fontWeight: '800',
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    margin: 20,
+    padding: 24,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontFamily: FONT_FAMILY,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalDivider: {
+    marginBottom: 16,
+  },
+  closeText: {
+    color: COLORS.muted,
+    fontFamily: FONT_FAMILY,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  formPanel: {
+    gap: 12,
+  },
+  formInput: {
+    backgroundColor: COLORS.surface,
+  },
+  saveButton: {
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  errorText: {
+    color: COLORS.danger,
+    fontFamily: FONT_FAMILY,
+    fontSize: 12,
+  },
+  toast: {
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 8,
+    bottom: 100,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    position: 'absolute',
+    alignSelf: 'center',
+  },
+  toastText: {
+    color: '#fff',
+    fontFamily: FONT_FAMILY,
+    fontSize: 13,
   },
   notificationDot: {
     backgroundColor: COLORS.danger,

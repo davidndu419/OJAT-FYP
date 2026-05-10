@@ -182,12 +182,7 @@ function SyncScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <ScreenHeader
-        eyebrow="Sync"
-        title="Cloud Sync"
-        subtitle="Keep local records aligned with the server."
-      />
-
+      <View style={styles.spacer} />
       <SurfaceCard style={styles.connectivityCard}>
         <IconBubble
           tone={networkStatus.isOnline ? 'success' : 'danger'}
@@ -291,9 +286,12 @@ const styles = StyleSheet.create({
   content: {
     alignSelf: 'center',
     maxWidth: 448,
-    paddingBottom: 112,
+    paddingBottom: 100,
     paddingHorizontal: 20,
     width: '100%',
+  },
+  spacer: {
+    height: 12,
   },
   connectivityCard: {
     alignItems: 'center',
